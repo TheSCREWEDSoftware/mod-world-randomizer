@@ -19,6 +19,7 @@
  */
 
 #include "WorldRandomizer.h"
+#include "WorldRandomizerAchievements.h"
 
 #include "CharacterCache.h"
 #include "Chat.h"
@@ -306,6 +307,11 @@ public:
             for (PlayerCreateInfoItem const& item : info->item)
                 allowed[item.item_id] += item.item_amount;
 
+        // Achievement start rewards are starting gear too
+        uint32 accountId = player->GetSession()->GetAccountId();
+        for (auto const& [item, amount] : WorldRandomizerAchievements::GetStartItems(accountId))
+            allowed[item] += amount;
+
         // Everything carried, worn, in bags, the bank, the keyring and the currency tab
         std::unordered_map<uint32, uint32> carried;
         auto count = [&carried](Item const* item)
@@ -337,7 +343,8 @@ public:
                 itr != allowed.end() ? " (more than you started with)" : ""));
         }
 
-        if (player->GetMoney() > sWorld->getIntConfig(CONFIG_START_PLAYER_MONEY))
+        if (player->GetMoney() > sWorld->getIntConfig(CONFIG_START_PLAYER_MONEY) +
+            WorldRandomizerAchievements::GetStartMoney(accountId))
             problems.push_back("you have more money than you started with");
 
         if (player->GetMailSize() ||

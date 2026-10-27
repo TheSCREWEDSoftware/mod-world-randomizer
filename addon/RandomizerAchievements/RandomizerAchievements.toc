@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: Randomizer Achievements
+## Notes: Achievements and rewards of mod-world-randomizer, for you and your party.
+## Author: FlyingArowana
+## Version: 1.0
+## SavedVariables: RandomizerAchievementsDB
+RandomizerAchievements.lua

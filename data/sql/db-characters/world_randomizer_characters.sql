@@ -75,3 +75,51 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_hardcore_taint` (
     `allowed_at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
     PRIMARY KEY (`guid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: hardcore eligibility';
+
+-- Achievements: progress per account (a run = one character's life).
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_done` (
+    `account` INT UNSIGNED NOT NULL,
+    `achievement_id` INT UNSIGNED NOT NULL,
+    `guid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Character that earned it',
+    `done_at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
+    PRIMARY KEY (`account`, `achievement_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: achievements done';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_counter` (
+    `account` INT UNSIGNED NOT NULL,
+    `counter` VARCHAR(32) NOT NULL COMMENT 'deaths, craft, gather_<skill>',
+    `value` INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (`account`, `counter`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: lifetime counters';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_zone` (
+    `account` INT UNSIGNED NOT NULL,
+    `zone_id` INT UNSIGNED NOT NULL,
+    PRIMARY KEY (`account`, `zone_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: zones discovered';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_run` (
+    `guid` INT UNSIGNED NOT NULL,
+    `counter` VARCHAR(32) NOT NULL COMMENT 'quests, money',
+    `value` INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (`guid`, `counter`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: per character (run) counters';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_rare` (
+    `guid` INT UNSIGNED NOT NULL,
+    `entry` INT UNSIGNED NOT NULL,
+    PRIMARY KEY (`guid`, `entry`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: rare creatures killed per character';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_choice` (
+    `account` INT UNSIGNED NOT NULL,
+    `start_profession` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Skill id, .rach profession',
+    PRIMARY KEY (`account`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: chosen starting profession';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_ach_skill` (
+    `guid` INT UNSIGNED NOT NULL,
+    `skill` INT UNSIGNED NOT NULL,
+    `value` SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+    PRIMARY KEY (`guid`, `skill`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: off-class weapon / armor skill values (any class unlocks)';

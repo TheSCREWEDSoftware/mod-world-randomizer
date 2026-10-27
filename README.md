@@ -29,6 +29,9 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
 - **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
   `.coop join <code>` and start in the same place, in the leader's group.
 
+- **Achievements**: 144 account-wide achievements (levels, zones, quests, gold, HP, deaths, rares, weapon skills,
+  professions, specializations...) whose rewards count on every character of the account. See below.
+
 Every feature has its own switch; `Randomizer.Enable` is the master switch and `Randomizer.Announce` the login
 message. Nothing is written to `creature`: the swaps happen in memory at startup. `Randomizer.World.Enable = 0`
 and a restart bring the normal world back.
@@ -89,6 +92,8 @@ Characters DB:
 - `world_randomizer_hardcore_taint`: characters ruled out of going hardcore (a trade, a mail, reaching level 2, a
   failed check), saved for good with the first reason; `allowed = 1` is an admin override (`.hardcore allow`).
 - `world_randomizer_coop` / `world_randomizer_coop_member`: co-op parties, their start point, and who joined.
+- `world_randomizer_ach_done`, `_counter`, `_zone`, `_run`, `_rare`, `_choice`, `_skill`: achievement progress per
+  account (and per character for a run), the chosen starting profession, saved off-class skill values.
 
 `tools/generate_from_aowow.py <aowow>/Stuff/zone-extract` rebuilds the zone SQL and `web/zones.js` after a new
 aowow setup.
@@ -101,6 +106,9 @@ aowow setup.
 | `.randomizer zones` | GM | Every zone and its bracket |
 | `.randomizer reroll [seed]` | admin | Store a new seed; the world changes after a restart |
 | `.randomizer start` | GM | Teleport to a bracket 1 start point for your faction |
+| `.rach` | players | Your account's achievement rewards |
+| `.rach list [category]` | players | Achievements, done or not |
+| `.rach profession [name]` | players | Choose the starting profession (once unlocked) |
 | `.coop` | players | Your co-op party and its code |
 | `.coop create` | players | Make a party and get its code (up to `Randomizer.Coop.MaxLevel`) |
 | `.coop join <code>` | players | Join a friend's party and start where they start |
@@ -129,6 +137,37 @@ The character goes back on its owner account under its old name, comes back to l
 restore is logged in `world_randomizer_hardcore_revive` (who, when, why). If the old name is taken by then, the
 command says so; restore it with `.character deleted restore <GUID> <new name>` and it still counts as a restore
 on its next login.
+
+## Achievements
+
+Account-wide, like a roguelite meta progression: a **run** is one character's life, **lifetime** counts every
+character on the account. Each achievement can have an icon, a description and several rewards; they live in
+`world_randomizer_achievement` and `world_randomizer_achievement_reward` (world DB), and
+`tools/generate_achievements.py` builds the shipped list (taken from the reference screenshots).
+
+Reward types (`type` column; numbers in `src/WorldRandomizerAchievements.h`): XP %, level cap (+levels over
+`Randomizer.Achievements.BaseLevelCap`), talent points per level, flat talent points, start gold, start items,
+looted money %, health / mana regen %, skill rate (per skill or every profession), armor / weapon type usable by
+any class, learn a spell (optionally once a profession is known), extra profession slots, start with a profession,
+unlock a starting profession choice (`.rach profession`), + starting skill, gathering yield multiplier, a spell at
+a level (the level 60 riding), and titles (the Explorer, Loremaster, the Seeker, the Patient). Type 0 is text
+only, for rewards that need features the module doesn't have yet (corrupted / treasure zones, enchanted drops,
+poisons for any class); the four achievements built on those are shipped disabled.
+
+"Usable by any class" gives the character the armor / weapon skill and proficiency on every login: the core
+deletes skills a race / class may not have (SkillRaceClassInfo.dbc) when it loads a character, so the module saves
+their values at logout and puts them back. Start items and gold from achievements count as starting gear for the
+hardcore fresh-start check.
+
+Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach profession [name]`.
+
+### The addon
+
+`addon/RandomizerAchievements` is a WoW 3.3.5 addon: copy the folder into the client's `Interface\AddOns`.
+`/randach` opens a window with the categories, each achievement's icon, rewards, description and progress bar, and
+buttons for each party / raid member to see their account's achievements and this run's stats. It talks to the
+server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
+nothing is shown in chat. `/randach <name>` opens a group member directly.
 
 ## About the stats eras
 

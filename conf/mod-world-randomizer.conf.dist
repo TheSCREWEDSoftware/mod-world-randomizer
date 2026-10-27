@@ -296,6 +296,48 @@ Randomizer.Hardcore.CountPvPDeaths = 1
 Randomizer.Hardcore.Announce = 1
 
 #
+#    Randomizer.Achievements.Enable
+#        Description: Account-wide achievements (`world_randomizer_achievement`). Their rewards count for every
+#                     character on the account: XP, level cap, talent points, start gold / items / professions,
+#                     regen, skill rates, armor and weapons usable by any class, titles... A "run" is one
+#                     character's life. .rach shows them in game; the RandomizerAchievements addon (addon/ folder)
+#                     shows them in a window, for you and your party members.
+#        Default:     1
+
+Randomizer.Achievements.Enable = 1
+
+#
+#    Randomizer.Achievements.Announce
+#        Description: Tell the player when an achievement is done, with its rewards, and the count on login.
+#        Default:     1
+
+Randomizer.Achievements.Announce = 1
+
+#
+#    Randomizer.Achievements.BaseLevelCap
+#        Description: Level cap before the "+N Max Level Cap" rewards. 0 = no cap from this module (those rewards
+#                     then do nothing). The shipped achievements give up to +12 levels, so 68 reaches 80.
+#        Default:     0
+
+Randomizer.Achievements.BaseLevelCap = 0
+
+#
+#    Randomizer.Achievements.DeathMinLevel
+#        Description: Deaths only count for the death achievements from this level.
+#        Default:     10
+
+Randomizer.Achievements.DeathMinLevel = 10
+
+#
+#    Randomizer.Achievements.HealthRegenSpell
+#    Randomizer.Achievements.ManaRegenSpell
+#        Description: Server side auras that carry the regen rewards (see world_randomizer_05_achievement_tables.sql).
+#        Default:     150110 / 150111
+
+Randomizer.Achievements.HealthRegenSpell = 150110
+Randomizer.Achievements.ManaRegenSpell = 150111
+
+#
 #    Randomizer.Stats.Era
 #        Description: Player base stats (Str, Agi, Sta, Int, Spi, base health and mana) per level.
 #                     Works with Randomizer.World.Enable = 0 too.
