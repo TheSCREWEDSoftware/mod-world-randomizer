@@ -21,7 +21,8 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   (vMaNGOS), with an XP rate per era (Wrath x0.5, TBC x0.75, Vanilla x1 by default).
 
 - **Hardcore** (optional): one life, chosen by the player (`.hardcore on confirm`) or forced for every new
-  character. A dead hardcore character is never deleted for good: it is soft deleted with the core's own unlink
+  character. Choosing it is only for a fresh character: level 1, nothing but its starting gear and starting money,
+  and no mail received or trade made, ever. A dead hardcore character is never deleted for good: it is soft deleted with the core's own unlink
   (or locked, or left a ghost), and `world_randomizer_hardcore` keeps it with its owner account, level, killer and
   date. A bugged death is undone with `.hardcore restore <name or GUID> [reason]`.
 
@@ -85,6 +86,7 @@ Characters DB:
 - `world_randomizer_state`: the world seed.
 - `world_randomizer_hardcore`: every hardcore character, owner account, status, level, killer, death date.
 - `world_randomizer_hardcore_revive`: every restore, with the GM and the reason.
+- `world_randomizer_hardcore_taint`: characters that received mail or opened a trade, so they can't go hardcore.
 - `world_randomizer_coop` / `world_randomizer_coop_member`: co-op parties, their start point, and who joined.
 
 `tools/generate_from_aowow.py <aowow>/Stuff/zone-extract` rebuilds the zone SQL and `web/zones.js` after a new
@@ -102,7 +104,7 @@ aowow setup.
 | `.coop create` | players | Make a party and get its code (up to `Randomizer.Coop.MaxLevel`) |
 | `.coop join <code>` | players | Join a friend's party and start where they start |
 | `.hardcore` | players | Your hardcore status |
-| `.hardcore on confirm` | players | Go hardcore (Mode 1, up to `OptInMaxLevel`) |
+| `.hardcore on confirm` | players | Go hardcore (Mode 1): level 1, starting gear and money only, never mailed or traded |
 | `.hardcore fallen` | players | The last 10 hardcore deaths |
 | `.hardcore restore <name or GUID> [reason]` | GM | Undo a death; lists the GUIDs when several dead characters share the name |
 

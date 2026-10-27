@@ -238,7 +238,6 @@ void WorldRandomizerMgr::LoadConfig()
 
     c.hardcoreMode = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.Mode", 0));
     c.hardcoreOnDeath = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.OnDeath", 2));
-    c.hardcoreOptInMaxLevel = sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.OptInMaxLevel", 1);
     c.hardcoreKickDelay = sConfigMgr->GetOption<uint32>("Randomizer.Hardcore.KickDelay", 10);
     c.hardcoreIgnoreBattlegrounds = sConfigMgr->GetOption<bool>("Randomizer.Hardcore.IgnoreBattlegrounds", true);
     c.hardcoreCountPvP = sConfigMgr->GetOption<bool>("Randomizer.Hardcore.CountPvPDeaths", true);

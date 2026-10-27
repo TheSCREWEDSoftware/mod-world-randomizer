@@ -131,7 +131,6 @@ struct RandomizerConfig
     // Hardcore: one life. A dead hardcore character is never deleted for good (see WorldRandomizerHardcore.cpp)
     uint8 hardcoreMode = 0;      // 0 off, 1 players opt in with .hardcore on, 2 every new character
     uint8 hardcoreOnDeath = 2;   // 0 ghost forever, 1 locked (can't log in), 2 soft deleted (core unlink)
-    uint8 hardcoreOptInMaxLevel = 1;
     uint32 hardcoreKickDelay = 10;
     bool hardcoreIgnoreBattlegrounds = true;
     bool hardcoreCountPvP = true;

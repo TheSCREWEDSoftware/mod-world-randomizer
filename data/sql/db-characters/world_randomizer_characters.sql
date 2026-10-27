@@ -63,3 +63,11 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_coop_member` (
     PRIMARY KEY (`guid`),
     KEY `idx_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: co-op party members';
+
+-- Hardcore: characters that received mail or opened a trade before going hardcore, so they can't go hardcore.
+CREATE TABLE IF NOT EXISTS `world_randomizer_hardcore_taint` (
+    `guid` INT UNSIGNED NOT NULL COMMENT 'characters.guid',
+    `reason` VARCHAR(16) NOT NULL DEFAULT '' COMMENT 'trade or mail',
+    `at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
+    PRIMARY KEY (`guid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: characters ruled out of hardcore';

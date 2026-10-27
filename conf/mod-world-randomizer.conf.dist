@@ -245,8 +245,11 @@ Randomizer.Coop.AutoGroup = 1
 #                     characters DB and listed in `world_randomizer_hardcore` with its owner account and how it
 #                     died. A GM can undo a bugged death with .hardcore restore <name or GUID> [reason].
 #                     Works with Randomizer.World.Enable = 0 too.
+#                     Choosing it (Mode 1) is only for a fresh character: level 1, nothing but its starting gear
+#                     and starting money, and no mail received or trade made, ever (both are remembered from the
+#                     moment they happen, in `world_randomizer_hardcore_taint`). .hardcore lists what is in the way.
 #        Default:     0 - off
-#                     1 - players choose: .hardcore on confirm (only up to OptInMaxLevel, can't be undone)
+#                     1 - players choose: .hardcore on confirm (fresh level 1 characters only, can't be undone)
 #                     2 - every new character is hardcore
 
 Randomizer.Hardcore.Mode = 0
@@ -260,13 +263,6 @@ Randomizer.Hardcore.Mode = 0
 #                     0 - ghost forever: can log in and walk around, can't be resurrected
 
 Randomizer.Hardcore.OnDeath = 2
-
-#
-#    Randomizer.Hardcore.OptInMaxLevel
-#        Description: Highest level at which .hardcore on is still allowed (Mode 1).
-#        Default:     1
-
-Randomizer.Hardcore.OptInMaxLevel = 1
 
 #
 #    Randomizer.Hardcore.KickDelay

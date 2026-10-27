@@ -8,6 +8,10 @@
  *       name and account move to deleteInfos_Name / deleteInfos_Account.
  * `world_randomizer_hardcore` keeps every hardcore character with its owner account and how it died.
  *
+ * Going hardcore (.hardcore on confirm, Mode 1) is only for a fresh character: level 1, nothing but its starting gear
+ * and starting money, and no mail received or trade made, ever. Mail and trades are remembered in
+ * `world_randomizer_hardcore_taint` from the moment they happen.
+ *
  * A death caused by a bug can be undone with .hardcore revive <name> [reason]: the character is linked back to its
  * account (if it was soft deleted), comes back alive on its next login, and the revive is logged with who did it
  * and why. Restoring with the core's .character deleted restore also counts as a revive on the next login.
@@ -20,7 +24,11 @@
 #include "CommandScript.h"
 #include "Creature.h"
 #include "DatabaseEnv.h"
+#include "Bag.h"
+#include "DBCStores.h"
 #include "GameTime.h"
+#include "Item.h"
+#include "Mail.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "Player.h"
@@ -111,6 +119,16 @@ public:
     void Load()
     {
         _entries.clear();
+        _taints.clear();
+
+        if (QueryResult taints = CharacterDatabase.Query(
+            "SELECT `guid`, `reason` FROM `world_randomizer_hardcore_taint`"))
+        {
+            do
+            {
+                _taints[(*taints)[0].Get<uint32>()] = (*taints)[1].Get<std::string>();
+            } while (taints->NextRow());
+        }
 
         //                                                       0       1          2       3       4        5
         QueryResult result = CharacterDatabase.Query("SELECT `guid`, `account`, `name`, `race`, `class`, `gender`, "
@@ -194,6 +212,104 @@ public:
 
         return Acore::StringFormat("{} / GUID {} / Account {} / Hardcore{} / {}", entry.name, guid, entry.account,
             entry.softDeleted ? " (soft deleted)" : "", state);
+    }
+
+    // A trade or a mail before going hardcore rules a character out for good
+    void Taint(ObjectGuid::LowType guid, char const* reason)
+    {
+        if (!guid || _entries.count(guid) || _taints.count(guid))
+            return;
+
+        _taints[guid] = reason;
+        CharacterDatabase.Execute("INSERT IGNORE INTO `world_randomizer_hardcore_taint` (`guid`, `reason`, `at`) "
+            "VALUES ({}, '{}', {})", guid, reason, GameTime::GetGameTime().count());
+    }
+
+    // Everything that stops this character from going hardcore; empty = allowed
+    std::vector<std::string> CheckFreshStart(Player* player) const
+    {
+        std::vector<std::string> problems;
+
+        if (player->GetLevel() != 1)
+            problems.push_back(Acore::StringFormat("you are level {}, a hardcore run starts at level 1",
+                player->GetLevel()));
+
+        // What the character was created with: CharStartOutfit.dbc (as Player::Create counts it) and
+        // `playercreateinfo_item`
+        std::unordered_map<uint32, uint32> allowed;
+        if (CharStartOutfitEntry const* outfit = GetCharStartOutfitEntry(player->getRace(), player->getClass(),
+            player->getGender()))
+        {
+            for (int32 itemId : outfit->ItemId)
+            {
+                if (itemId <= 0)
+                    continue;
+
+                ItemTemplate const* proto = sObjectMgr->GetItemTemplate(uint32(itemId));
+                if (!proto)
+                    continue;
+
+                uint32 count = proto->BuyCount;
+                if (proto->Class == ITEM_CLASS_CONSUMABLE && proto->SubClass == ITEM_SUBCLASS_FOOD)
+                {
+                    if (proto->Spells[0].SpellCategory == SPELL_CATEGORY_FOOD)
+                        count = player->IsClass(CLASS_DEATH_KNIGHT, CLASS_CONTEXT_INIT) ? 10 : 4;
+                    else if (proto->Spells[0].SpellCategory == SPELL_CATEGORY_DRINK)
+                        count = 2;
+                    count = std::min<uint32>(count, proto->GetMaxStackSize());
+                }
+
+                allowed[uint32(itemId)] += count;
+            }
+        }
+
+        if (PlayerInfo const* info = sObjectMgr->GetPlayerInfo(player->getRace(), player->getClass()))
+            for (PlayerCreateInfoItem const& item : info->item)
+                allowed[item.item_id] += item.item_amount;
+
+        // Everything carried, worn, in bags, the bank, the keyring and the currency tab
+        std::unordered_map<uint32, uint32> carried;
+        auto count = [&carried](Item const* item)
+        {
+            if (item)
+                carried[item->GetEntry()] += item->GetCount();
+        };
+
+        for (uint8 slot = EQUIPMENT_SLOT_START; slot < CURRENCYTOKEN_SLOT_END; ++slot)
+        {
+            if (slot >= BUYBACK_SLOT_START && slot < BUYBACK_SLOT_END)
+                continue;
+
+            count(player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot));
+            if (Bag* bag = player->GetBagByPos(slot))
+                for (uint32 i = 0; i < bag->GetBagSize(); ++i)
+                    count(bag->GetItemByPos(uint8(i)));
+        }
+
+        for (auto const& [entry, amount] : carried)
+        {
+            auto itr = allowed.find(entry);
+            if (itr != allowed.end() && amount <= itr->second)
+                continue;
+
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(entry);
+            problems.push_back(Acore::StringFormat("you carry {}{} that is not starting gear",
+                proto ? proto->Name1 : Acore::StringFormat("item {}", entry),
+                itr != allowed.end() ? " (more than you started with)" : ""));
+        }
+
+        if (player->GetMoney() > sWorld->getIntConfig(CONFIG_START_PLAYER_MONEY))
+            problems.push_back("you have more money than you started with");
+
+        auto taint = _taints.find(player->GetGUID().GetCounter());
+        if (taint != _taints.end())
+            problems.push_back(taint->second == "trade" ? "this character has traded with another player" :
+                "this character has received mail");
+        else if (player->GetMailSize() || CharacterDatabase.Query("SELECT 1 FROM `mail` WHERE `receiver` = {} LIMIT 1",
+            player->GetGUID().GetCounter()))
+            problems.push_back("this character has received mail");
+
+        return problems;
     }
 
     bool IsHardcore(Player const* player) const
@@ -480,6 +596,7 @@ private:
     }
 
     std::unordered_map<ObjectGuid::LowType, Entry> _entries;
+    std::unordered_map<ObjectGuid::LowType, std::string> _taints; // "trade" or "mail"
     std::unordered_map<ObjectGuid::LowType, PendingDeath> _pending;
     std::unordered_map<ObjectGuid::LowType, uint32> _unlinkQueue;
 };
@@ -512,8 +629,19 @@ public:
         PLAYERHOOK_ON_FIRST_LOGIN,
         PLAYERHOOK_ON_LOGIN,
         PLAYERHOOK_ON_PLAYER_JUST_DIED,
-        PLAYERHOOK_CAN_RESURRECT
+        PLAYERHOOK_CAN_RESURRECT,
+        PLAYERHOOK_CAN_INIT_TRADE
     }) { }
+
+    bool OnPlayerCanInitTrade(Player* player, Player* target) override
+    {
+        if (sWorldRandomizer->Config().hardcoreMode == 1)
+        {
+            sHardcore->Taint(player->GetGUID().GetCounter(), "trade");
+            sHardcore->Taint(target->GetGUID().GetCounter(), "trade");
+        }
+        return true;
+    }
 
     void OnPlayerFirstLogin(Player* player) override
     {
@@ -536,6 +664,20 @@ public:
     bool OnPlayerCanResurrect(Player* player) override
     {
         return !sHardcore->Enabled() || !sHardcore->IsDead(player);
+    }
+};
+
+class HardcoreMailScript : public MailScript
+{
+public:
+    HardcoreMailScript() : MailScript("HardcoreMailScript", { MAILHOOK_ON_BEFORE_MAIL_DRAFT_SEND_MAIL_TO }) { }
+
+    void OnBeforeMailDraftSendMailTo(MailDraft* /*mailDraft*/, MailReceiver const& receiver,
+        MailSender const& /*sender*/, MailCheckMask& /*checked*/, uint32& /*deliverDelay*/,
+        uint32& /*customExpiration*/, bool& /*deleteMailItemsFromDB*/, bool& /*sendMail*/) override
+    {
+        if (sWorldRandomizer->Config().hardcoreMode == 1)
+            sHardcore->Taint(receiver.GetPlayerGUIDLow(), "mail");
     }
 };
 
@@ -588,9 +730,19 @@ public:
         Player* player = handler->GetSession()->GetPlayer();
         if (sHardcore->IsHardcore(player))
             handler->SendSysMessage("You are hardcore: one life.");
-        else if (config.hardcoreMode == 1 && player->GetLevel() <= config.hardcoreOptInMaxLevel)
-            handler->PSendSysMessage("You are not hardcore. Type .hardcore on confirm to go hardcore (only up to "
-                "level {}, and it can't be undone).", config.hardcoreOptInMaxLevel);
+        else if (config.hardcoreMode == 1)
+        {
+            std::vector<std::string> problems = sHardcore->CheckFreshStart(player);
+            if (problems.empty())
+                handler->SendSysMessage("You are not hardcore. Type .hardcore on confirm to go hardcore (it can't be "
+                    "undone).");
+            else
+            {
+                handler->SendSysMessage("You are not hardcore, and this character can't go hardcore:");
+                for (std::string const& problem : problems)
+                    handler->PSendSysMessage("  - {}", problem);
+            }
+        }
         else
             handler->SendSysMessage("You are not hardcore.");
 
@@ -615,9 +767,14 @@ public:
             return false;
         }
 
-        if (player->GetLevel() > config.hardcoreOptInMaxLevel)
+        // Only a fresh character: level 1, starting gear and money, never mailed or traded
+        std::vector<std::string> problems = sHardcore->CheckFreshStart(player);
+        if (!problems.empty())
         {
-            handler->SendErrorMessage("Hardcore can only be chosen up to level {}.", config.hardcoreOptInMaxLevel);
+            handler->SendSysMessage("A hardcore run can only start on a fresh level 1 character with just its starting "
+                "gear, and no mail or trades ever. Not this one:");
+            for (std::string const& problem : problems)
+                handler->PSendSysMessage("  - {}", problem);
             return false;
         }
 
@@ -696,6 +853,7 @@ void AddWorldRandomizerHardcoreScripts()
 {
     new HardcoreWorldScript();
     new HardcorePlayerScript();
+    new HardcoreMailScript();
     new HardcoreUnitScript();
     new HardcoreCommandScript();
 }
