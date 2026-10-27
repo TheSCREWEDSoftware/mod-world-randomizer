@@ -1,0 +1,167 @@
+[worldserver]
+
+########################################
+# mod-world-randomizer configuration
+########################################
+#
+# The shuffle is built once at startup. Changes here need a worldserver restart.
+# Nothing is written to the creature tables, so Randomizer.Enable = 0 brings the normal world back.
+
+#
+#    Randomizer.Enable
+#        Description: Shuffle the world.
+#        Default:     0 - disabled
+#                     1 - enabled
+
+Randomizer.Enable = 0
+
+#
+#    Randomizer.Seed
+#        Description: World seed. 0 = roll one on the first start and keep it (characters DB,
+#                     `world_randomizer_state`); .randomizer reroll stores a new one.
+#                     The same seed, brackets and scope give the same shuffle here and on the web map.
+#        Default:     0
+
+Randomizer.Seed = 0
+
+#
+#    Randomizer.Brackets
+#        Description: The level brackets, lowest first: "min-max,min-max,...". Each zone's original range
+#                     puts it in a "home" bracket (the one holding the middle of its range); the shuffle then
+#                     hands the brackets out to random zones. Bracket 1 is where new characters start.
+#        Example:     "1-7,7-15,16-24,25-34,35-44,45-53,54-60" (the Classic video's brackets)
+#        Default:     "1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80"
+
+Randomizer.Brackets = "1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80"
+
+#
+#    Randomizer.Brackets.Balanced
+#        Description: 0 = every bracket keeps as many zones as it had (the shuffle swaps zones around).
+#                     1 = zones are spread evenly over the brackets.
+#        Default:     0
+
+Randomizer.Brackets.Balanced = 0
+
+#
+#    Randomizer.Scope
+#        Description: Which zones are shuffled together.
+#        Default:     0 - the whole world (Elwynn might be 70-80, Icecrown 1-10)
+#                     1 - within each continent
+#                     2 - within each expansion
+
+Randomizer.Scope = 0
+
+#
+#    Randomizer.Creatures.Replace
+#        Description: Replace outdoor combat creatures with a random creature from the zone's new bracket.
+#                     The pool is every hostile / neutral creature that spawns in the open world, sorted into
+#                     brackets by its level, split into land / water and normal / elite.
+#                     Never replaced: NPCs with flags (vendors, quest givers...), creatures friendly to either
+#                     faction (guards, town folk), critters, triggers, vehicles, world bosses, creatures with a
+#                     C++ script, and spawns with their own SmartAI script.
+#        Default:     1
+
+Randomizer.Creatures.Replace = 1
+
+#
+#    Randomizer.Creatures.SameEntrySameReplacement
+#        Description: 1 = every spawn of the same creature in a zone becomes the same random creature
+#                     (a pack of wolves becomes a pack of something else). 0 = every spawn rolls on its own.
+#        Default:     1
+
+Randomizer.Creatures.SameEntrySameReplacement = 1
+
+#
+#    Randomizer.Creatures.ReplaceElites
+#    Randomizer.Creatures.ReplaceRares
+#        Description: Also replace elites (with elites) / rares.
+#        Default:     1 / 0
+
+Randomizer.Creatures.ReplaceElites = 1
+Randomizer.Creatures.ReplaceRares = 0
+
+#
+#    Randomizer.Creatures.KeepQuestCreatures
+#        Description: Keep creatures that are quest kill targets, so quests stay doable.
+#        Default:     1
+
+Randomizer.Creatures.KeepQuestCreatures = 1
+
+#
+#    Randomizer.Creatures.ShiftKeptLevels
+#        Description: Creatures that are kept move their level into the zone's new bracket.
+#        Default:     1
+
+Randomizer.Creatures.ShiftKeptLevels = 1
+
+#
+#    Randomizer.Creatures.ExcludeEntries
+#        Description: Creature entries never replaced, comma separated.
+#        Default:     ""
+
+Randomizer.Creatures.ExcludeEntries = ""
+
+#
+#    Randomizer.Creatures.ComputeMissingZones
+#        Description: Most rows of `creature` have zoneId 0. The first start works out their zones from the
+#                     terrain (slow once) and saves them in `world_randomizer_spawn_zone`. You can also run
+#                     the core once with Calculate.Creature.Zone.Area.Data = 1 instead.
+#        Default:     1
+
+Randomizer.Creatures.ComputeMissingZones = 1
+
+#
+#    Randomizer.Dungeons.ShiftLevels
+#        Description: Dungeon creatures move by as many levels as their entrance zone's bracket moved.
+#                     The entrance zone comes from the area trigger that teleports into the dungeon;
+#                     `world_randomizer_instance` can override it.
+#                     If mod-dynamic-scaling also runs, set DynamicScaling.Instance.LevelScaling.Enable = 0.
+#        Default:     1
+
+Randomizer.Dungeons.ShiftLevels = 1
+
+#
+#    Randomizer.PlayerStart.Enable
+#        Description: New characters start at a graveyard in a random bracket 1 zone, with the hearthstone
+#                     set there.
+#        Default:     1
+
+Randomizer.PlayerStart.Enable = 1
+
+#
+#    Randomizer.PlayerStart.FactionLock
+#        Description: 1 = only zones of the player's own faction, then contested zones.
+#                     0 = any bracket 1 zone with a graveyard the player may use.
+#        Default:     1
+
+Randomizer.PlayerStart.FactionLock = 1
+
+#
+#    Randomizer.PlayerStart.SkipDeathKnights
+#        Description: Death Knights keep their normal Ebon Hold start.
+#        Default:     1
+
+Randomizer.PlayerStart.SkipDeathKnights = 1
+
+#
+#    Randomizer.Stats.Era
+#        Description: Player base stats (Str, Agi, Sta, Int, Spi, base health and mana) per level.
+#                     This works with Randomizer.Enable = 0 too.
+#        Default:     0 - unchanged (AzerothCore, normal XP)
+#                     1 - Vanilla (vMaNGOS)       levels 1-60, then AzerothCore's growth
+#                     2 - TBC     (cMaNGOS-TBC)   levels 1-70, then AzerothCore's growth
+#                     3 - Wrath   (AzerothCore)   same stats as 0, but the Wrath XP rate below
+
+Randomizer.Stats.Era = 0
+
+#
+#    Randomizer.Stats.XPRate.Vanilla
+#    Randomizer.Stats.XPRate.TBC
+#    Randomizer.Stats.XPRate.Wrath
+#        Description: XP multiplier for the chosen era (all XP: kills, quests, exploration).
+#                     Stacks with the core Rate.XP.* settings.
+#        Default:     1.0 / 0.75 / 0.5
+
+Randomizer.Stats.XPRate.Vanilla = 1.0
+Randomizer.Stats.XPRate.TBC = 0.75
+Randomizer.Stats.XPRate.Wrath = 0.5
