@@ -8,10 +8,17 @@ from pathlib import Path
 
 rows=[]   # (id, category, category_name, name, criteria, value, arg, enabled, description, icon, expansion, parent)
 VANILLA, TBC, WRATH = 1, 2, 4   # `expansion` is a mask: add them up, 0 = every expansion
+# Versions of one achievement: the Vanilla row keeps its id (and is the parent), TBC is id + 2000, Wrath id + 4000.
+VERSION_OFFSET = {VANILLA: 0, TBC: 2000, WRATH: 4000}
+# TBC and Wrath level slower (Randomizer.Stats.XPRate.* defaults 0.75 / 0.5), so levelling rewards are bigger there:
+# a Vanilla reward is multiplied by 1 / rate (XP percent rounded to 5, gold rounded up).
+LEVELLING_FACTOR = {VANILLA: 1.0, TBC: 1 / 0.75, WRATH: 1 / 0.5}
+def xp_for(pct, exp): return int(round(pct * LEVELLING_FACTOR[exp] / 5) * 5)
+def gold_for(gold, exp): return int(-(-gold * LEVELLING_FACTOR[exp] // 1))
 rewards=[] # (achievement_id, idx, type, value, arg, arg2, text)
 SCOPE={1:'Any character on your account.',2:'Lifetime, every character on your account.',3:'One character, in one life.',4:'One character, in one life: gold held at once.',5:'Any character on your account.',6:'Lifetime, every character on your account, at level 10 or higher.',7:'One character, in one life: different rare creatures.',8:'Any character.',9:'Any character on your account.',10:'Lifetime, every character on your account.',11:'Lifetime, every character on your account.',12:'Any character on your account.',13:'Every other achievement in this category.'}
 WEAPON_ICONS={95:'Ability_Defend',44:'INV_Axe_01',43:'INV_Sword_04',54:'INV_Mace_01',172:'INV_Axe_09',55:'INV_Sword_06',160:'INV_Hammer_05',45:'INV_Weapon_Bow_05',226:'INV_Weapon_Crossbow_01',229:'INV_Spear_06',473:'INV_Gauntlets_04',136:'INV_Staff_08',162:'Ability_Warrior_Revenge',176:'INV_ThrowingAxe_01',228:'INV_Wand_01'}
-PROF_ICONS={171:'Trade_Alchemy',164:'Trade_BlackSmithing',333:'Trade_Engraving',202:'Trade_Engineering',197:'Trade_Tailoring',165:'INV_Misc_ArmorKit_17',186:'Trade_Mining',182:'Spell_Nature_NatureTouchGrow',393:'INV_Misc_Pelt_Wolf_01',356:'Trade_Fishing',129:'Spell_Holy_SealOfSacrifice',185:'INV_Misc_Food_15'}
+PROF_ICONS={755:'INV_Misc_Gem_01',773:'INV_Inscription_Tradeskill01',171:'Trade_Alchemy',164:'Trade_BlackSmithing',333:'Trade_Engraving',202:'Trade_Engineering',197:'Trade_Tailoring',165:'INV_Misc_ArmorKit_17',186:'Trade_Mining',182:'Spell_Nature_NatureTouchGrow',393:'INV_Misc_Pelt_Wolf_01',356:'Trade_Fishing',129:'Spell_Holy_SealOfSacrifice',185:'INV_Misc_Food_15'}
 CAT_ICONS={2:'INV_Misc_Map_01',3:'Achievement_Quests_Completed_08',4:'INV_Misc_Coin_02',5:'Spell_Holy_DivineIntervention',6:'Spell_Holy_Heal',7:'Ability_Rogue_FeignDeath',8:'INV_Misc_Head_Dragon_01',9:'Spell_Shadow_DeathScream',13:'INV_Pick_02',14:'INV_Misc_Gear_01',19:'INV_Misc_Book_11'}
 def icon_for(cat, crit, value, arg):
     if cat==1: return f'Achievement_Level_{value}'
@@ -32,9 +39,13 @@ NONE=0
 LEVEL,ZONES,QUESTS,GOLD,HP,DEATHS,RARES,HIGHER,SKILL,GATHER,CRAFT,SPELLC,CATEGORY=1,2,3,4,5,6,7,8,9,10,11,12,13
 
 # 1 Levels
+# Every expansion has its own version (bigger XP reward where levelling is slower); 70 is TBC / Wrath, 80 Wrath only
 for i,l in enumerate(range(10,90,10)):
-    ach(100+i+1,1,'Levels',f'Reach level {l} on any character',LEVEL,l,0,[(XP,50,0,0,'XP +50%'),(NONE,0,0,0,'4 Zones Corrupted')],
-        expansion=(TBC|WRATH) if l==70 else (WRATH if l==80 else 0))
+    for exp in (VANILLA,TBC,WRATH):
+        if (l==70 and exp==VANILLA) or (l==80 and exp!=WRATH): continue
+        base=100+i+1; xp=xp_for(50,exp)
+        ach(base+VERSION_OFFSET[exp],1,'Levels',f'Reach level {l} on any character',LEVEL,l,0,
+            [(XP,xp,0,0,f'XP +{xp}%'),(NONE,0,0,0,'4 Zones Corrupted')],expansion=exp,parent=base)
 # 2 Zone discovery
 for i,n in enumerate([10,20,30]):
     ach(201+i,2,'Zone Discovery',f'Discover {n} different zones',ZONES,n,0,[(CAP,1,0,0,'+1 Max Level Cap')])
@@ -49,15 +60,21 @@ ach(206,2,'Zone Discovery','Discover all zones',ZONES,0,0,[(LVLSPELL,0,33391,40,
 for i,n in enumerate([5,10,25,50,100]):
     ach(301+i,3,'Questing',f'Complete {n} quests in a single run',QUESTS,n,0,[(TAL,0.1,0,0,'+0.1 Talent Point Gain')]+([(TITLE,0,125,0,'Title: Loremaster')] if n==100 else []))
 # 4 Gold
-ach(401,4,'Gold Milestones','Get 10 gold in a single run',GOLD,10,0,[(SGOLD,1,0,0,'+1g Start')])
-ach(402,4,'Gold Milestones','Get 50 gold in a single run',GOLD,50,0,[(SGOLD,1,0,0,'+1g Start')])
-ach(403,4,'Gold Milestones','Get 250 gold in a single run',GOLD,250,0,[(GDROP,50,0,0,'Enemies drop +50% gold')])
-ach(404,4,'Gold Milestones','Get 1000 gold in a single run',GOLD,1000,0,[(GDROP,100,0,0,'Enemies drop x2 gold')])
+GOLD_STEPS={VANILLA:[10,50,250,1000],TBC:[25,100,500,2000],WRATH:[50,250,1000,5000]}
+for exp in (VANILLA,TBC,WRATH):
+    for i,n in enumerate(GOLD_STEPS[exp]):
+        if i<2: g=gold_for(1,exp); rew=[(SGOLD,g,0,0,f'+{g}g Start')]
+        else: rew=[(GDROP,50,0,0,'Enemies drop +50% gold')] if i==2 else [(GDROP,100,0,0,'Enemies drop x2 gold')]
+        ach(401+i+VERSION_OFFSET[exp],4,'Gold Milestones',f'Get {n} gold in a single run',GOLD,n,0,rew,
+            expansion=exp,parent=401+i)
 # 5 Feats (needs dungeon / corrupted zone tracking: listed, off)
 ach(501,5,'Feats','Complete a run without dying (all dungeons solo)',LEVEL,80,0,[(NONE,0,0,0,'Double Corrupted Zones + Special Drops')],enabled=0)
 # 6 HP
-for i,(n,p) in enumerate([(500,20),(1000,20),(2000,20),(5000,50)]):
-    ach(601+i,6,'HP Milestones',f'Reach {n} total HP on any character',HP,n,0,[(HREG,p,0,0,f'+{p}% Health Regen')])
+HP_STEPS={VANILLA:[500,1000,2000,5000],TBC:[1000,2500,5000,10000],WRATH:[2000,5000,10000,25000]}
+for exp in (VANILLA,TBC,WRATH):
+    for i,(n,p) in enumerate(zip(HP_STEPS[exp],[20,20,20,50])):
+        ach(601+i+VERSION_OFFSET[exp],6,'HP Milestones',f'Reach {n} total HP on any character',HP,n,0,
+            [(HREG,p,0,0,f'+{p}% Health Regen')],expansion=exp,parent=601+i)
 # 7 Deaths
 ach(701,7,'Deaths','Die 1 time (min level 10)',DEATHS,1,0,[(SITEM,0,118,1,'+1 Minor Healing Potion on start')])
 ach(702,7,'Deaths','Die 10 times total (min level 10)',DEATHS,10,0,[(SITEM,0,4496,2,'+2 Six-Slot Bags'),(SITEM,0,118,2,'+2 Potions on start')])
@@ -81,10 +98,17 @@ i=0
 for n,s in weapons:
     if n=='Unarmed': continue
     ach(1102+i,11,'Weapon Skills 225 - Any Class Unlock',f'Train {n} to 225',SKILL,225,s,[(PROF,0,s,0,f'{anyclass[n]} usable by any class')]); i+=1
-ach(1201,12,'Weapon Skills 300','Train Defense to 300',SKILL,300,95,[(SRATE,1,95,0,'Defense Skill Rate x2')])
-for i,(n,s) in enumerate(weapons):
-    ach(1202+i,12,'Weapon Skills 300',f'Train {n} to 300',SKILL,300,s,[(SRATE,0.5,s,0,'Weapon Skill Rate +0.5')])
-ach(1299,12,'Weapon Skills 300','Train all weapon proficiencies to 300',CATEGORY,1,12,[(CAP,2,0,0,'+2 Max Level Cap')])
+# Max weapon skill of each expansion: 300 / 350 / 400
+WEAPON_MAX={VANILLA:300,TBC:350,WRATH:400}
+for exp in (VANILLA,TBC,WRATH):
+    m=WEAPON_MAX[exp]; o=VERSION_OFFSET[exp]
+    ach(1201+o,12,'Weapon Skills - Max',f'Train Defense to {m}',SKILL,m,95,[(SRATE,1,95,0,'Defense Skill Rate x2')],
+        expansion=exp,parent=1201)
+    for i,(n,s) in enumerate(weapons):
+        ach(1202+i+o,12,'Weapon Skills - Max',f'Train {n} to {m}',SKILL,m,s,[(SRATE,0.5,s,0,'Weapon Skill Rate +0.5')],
+            expansion=exp,parent=1202+i)
+ach(1299,12,'Weapon Skills - Max','Train all weapon skills to the max',CATEGORY,1,12,[(CAP,2,0,0,'+2 Max Level Cap')],
+    desc='Every weapon skill in this category: 300 in Vanilla, 350 in TBC, 400 in Wrath.')
 # Gathering (lifetime)
 ach(1301,13,'Gathering','Mine 100 ore nodes (lifetime)',GATHER,100,186,[(SITEM,0,2770,20,'Start with 20x Copper Ore')])
 ach(1302,13,'Gathering','Herb 100 herb nodes (lifetime)',GATHER,100,182,[(SITEM,0,2447,20,'Start with 20x Peacebloom')])
@@ -124,16 +148,29 @@ specs=[('Armorsmith',9788,164),('Weaponsmith',9787,164),('Dragonscale Leatherwor
 for i,(n,sp,sk) in enumerate(specs):
     ach(1901+i,19,'Specializations',f'Gain {n} specialization',SPELLC,1,sp,[(SPELL,0,sp,sk,'Permanently Unlocked from Start (once you have the profession)')])
 ach(1999,19,'Specializations','Learn all specializations',CATEGORY,1,19,[(CAP,2,0,0,'+2 Max Level Cap')])
+# Outland and Northrend skill caps (new categories, no Vanilla version): 375 in TBC and Wrath, 450 in Wrath only.
+# Jewelcrafting came with TBC, Inscription with Wrath. Their ids are in the TBC / Wrath ranges (2000+ / 4000+).
+late=profs+[('Jewelcrafting',755),('Inscription',773)]
+for i,(n,s) in enumerate(late):
+    ach(2501+i,20,'Professions 375',f'Reach skill 375 in {n}',SKILL,375,s,[(SRATE,0.05,s,0,'Skill Rate +5%')],
+        expansion=WRATH if s==773 else TBC|WRATH)
+ach(2599,20,'Professions 375','Reach skill 375 in all professions',CATEGORY,1,20,[(CAP,1,0,0,'+1 Max Level Cap')],
+    expansion=TBC|WRATH)
+for i,(n,s) in enumerate(late):
+    ach(4801+i,21,'Professions 450',f'Reach skill 450 in {n}',SKILL,450,s,[(SRATE,0.05,s,0,'Skill Rate +5%')],
+        expansion=WRATH)
+ach(4899,21,'Professions 450','Reach skill 450 in all professions',CATEGORY,1,21,[(CAP,2,0,0,'+2 Max Level Cap')],
+    expansion=WRATH)
 
 def q(s): return "'"+str(s).replace("'","''")+"'"
 out=["-- mod-world-randomizer: achievements and their rewards (account-wide; see WorldRandomizerAchievements.h for",
 "-- the criteria / reward numbers). Rows with `enabled` = 0 need features the module doesn't have yet",
 "-- (corrupted / treasure zones, flawless dungeon runs); their rewards with type 0 are text only.",
-"DELETE FROM `world_randomizer_achievement` WHERE `id` BETWEEN 100 AND 1999;",
+"DELETE FROM `world_randomizer_achievement` WHERE `id` BETWEEN 100 AND 5999;",
 "INSERT INTO `world_randomizer_achievement` (`id`, `category`, `category_name`, `name`, `description`, `icon`, `expansion`, `parent_id`, `criteria`, `value`, `arg`, `enabled`) VALUES",
 ",\n".join(f"({r[0]}, {r[1]}, {q(r[2])}, {q(r[3])}, {q(r[8])}, {q(r[9])}, {r[10]}, {r[11]}, {r[4]}, {r[5]}, {r[6]}, {r[7]})" for r in rows)+";",
 "",
-"DELETE FROM `world_randomizer_achievement_reward` WHERE `achievement_id` BETWEEN 100 AND 1999;",
+"DELETE FROM `world_randomizer_achievement_reward` WHERE `achievement_id` BETWEEN 100 AND 5999;",
 "INSERT INTO `world_randomizer_achievement_reward` (`achievement_id`, `idx`, `type`, `value`, `arg`, `arg2`, `text`) VALUES",
 ",\n".join(f"({r[0]}, {r[1]}, {r[2]}, {r[3]}, {r[4]}, {r[5]}, {q(r[6])})" for r in rewards)+";"]
 open(Path(__file__).resolve().parent.parent / 'data/sql/db-world/world_randomizer_06_achievements.sql','w',encoding='utf-8').write("\n".join(out)+"\n")

@@ -162,9 +162,24 @@ hardcore fresh-start check.
 Each achievement also has an `expansion` mask (1 Vanilla, 2 TBC, 4 Wrath, added up; 0 = every expansion) and a
 `parent_id`: versions of the same achievement share a parent (0 or the row's own id is the base). Only the versions
 for `Randomizer.Achievements.Expansion` count (by default it follows the stats era); the addon shows the content
-of each version and lists the others when you hover it. Shipped examples: "Reach level 70" is TBC + Wrath, "Reach
-level 80" Wrath only, and "Discover all zones" has three versions (Vanilla: epic mount at 60, TBC: flying at 70,
-Wrath: epic mount at 40).
+of each version and lists the others when you hover it.
+
+The shipped list is the original (Vanilla) creator's. Its Vanilla rows keep their ids; TBC versions are id + 2000 and
+Wrath versions id + 4000. What changes per expansion:
+
+| Achievements | Vanilla | TBC | Wrath |
+|---|---|---|---|
+| Levels | 10-60, XP +50% | 10-70, XP +65% | 10-80, XP +100% |
+| Gold in a run | 10 / 50 / 250 / 1000, +1g start | 25 / 100 / 500 / 2000, +2g | 50 / 250 / 1000 / 5000, +2g |
+| Max health | 500 / 1000 / 2000 / 5000 | 1000 / 2500 / 5000 / 10000 | 2000 / 5000 / 10000 / 25000 |
+| Weapon skills - Max | 300 | 350 | 400 |
+| Professions 375 / 450 | - | 375 (with Jewelcrafting) | 375 and 450 (with Inscription) |
+| Discover all zones | epic mount at 60 | flying at 70 | epic mount at 40 |
+
+Requirements follow each expansion's numbers, and levelling rewards grow by 1 / XP rate (the default rates 0.75 and
+0.5), because each level takes longer there. Everything else (zones, quests, rares, deaths, gathering, crafting,
+weapon skill 150 / 225, professions up to 300) is the same in every expansion. Change the numbers in
+`tools/generate_achievements.py` and run it, or edit the rows directly.
 
 Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach profession [name]`.
 
