@@ -2,9 +2,10 @@
 
 A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
 
-- **Brackets**: you list the level brackets (`Randomizer.Brackets`). Every outdoor zone gets a home bracket
-  from its real level range, then the brackets are shuffled between zones. Elwynn Forest might be 70-80 and
-  Icecrown 1-10.
+- **Brackets**: you list the level brackets (`Randomizer.Brackets`, lowest first, following on from each other).
+  Every outdoor zone gets a home bracket from its real level range, then the brackets are shuffled between zones.
+  Elwynn Forest might be 70-80 and Icecrown 1-10. By default neighbouring zones get neighbouring brackets
+  (`Randomizer.Brackets.Adjacent`), so the levels flow across the map like the original world does.
 - **Creatures**: every outdoor combat creature becomes a random creature whose level fits the zone's new bracket.
   The pool is every hostile / neutral creature that spawns somewhere in the open world, sorted into the brackets
   by level and split into land / water and normal / elite. All spawns of one creature in a zone become the
@@ -29,13 +30,14 @@ across restarts until you reroll it.
 
 Plain HTML + JavaScript, no build step.
 
-- `index.html`: character roller. Era, faction, race, class, spec, two professions; hardcore mode locks the
-  first roll. It also tells you which bracket 1 zones you can start in with the seed from the map page.
+- `index.html`: character roller. Era, faction, race, class, spec, two professions; tick which factions, races and
+  classes may be rolled (Death Knights are off by default, they start at 55); hardcore mode locks the first roll. It also tells you which bracket 1 zones you can start in with the seed from the map page.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
 
 `web/randomizer.js` is the same shuffle as `WorldRandomizer.cpp` (same generator, same order), so a seed shows
-exactly the world the server will build. Tested for 30 seed / scope / balance combinations against the C++.
+exactly the world the server will build. Tested for 72 seed / scope / balance / adjacency combinations against the
+C++.
 
 The map uses aowow's map images. Copy `web/` into `aowow/Stuff/randomizer/` (or anywhere under your aowow) and
 open `http://localhost/aowow/Stuff/randomizer/map.html`; the default image folder
@@ -48,6 +50,8 @@ World DB:
 
 - `world_randomizer_zone`: the 64 outdoor zones from your aowow extract (cities left out), original level
   range, continent, expansion, territory. `enabled = 0` drops a zone; `shuffle = 0` keeps it in its own bracket.
+- `world_randomizer_zone_link`: which zones border each other, worked out from the aowow outlines (plus a few
+  borders across water and boat links), for `Randomizer.Brackets.Adjacent`.
 - `world_randomizer_instance`: optional entrance zone per instance, if the area trigger lookup gets one wrong.
 - `world_randomizer_spawn_zone`: cache. Most `creature` rows have `zoneId = 0`; the first start works their
   zones out from the terrain (slow once) and keeps them here.

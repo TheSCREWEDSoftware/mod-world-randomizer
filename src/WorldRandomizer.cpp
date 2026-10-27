@@ -130,6 +130,12 @@ std::vector<Bracket> WorldRandomizerMgr::ParseBrackets(std::string const& text)
         brackets.push_back({ uint8(*low), uint8(*high) });
     }
 
+    // Lowest first, whatever order they were typed in
+    std::stable_sort(brackets.begin(), brackets.end(), [](Bracket const& a, Bracket const& b)
+    {
+        return a.levelMin != b.levelMin ? a.levelMin < b.levelMin : a.levelMax < b.levelMax;
+    });
+
     return brackets;
 }
 
@@ -176,16 +182,24 @@ void WorldRandomizerMgr::LoadConfig()
     c.enable = sConfigMgr->GetOption<bool>("Randomizer.Enable", false);
     c.seed = sConfigMgr->GetOption<uint32>("Randomizer.Seed", 0);
     c.brackets = ParseBrackets(sConfigMgr->GetOption<std::string>("Randomizer.Brackets",
-        "1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80"));
+        "1-10,11-20,21-30,31-40,41-50,51-60,61-70,71-80"));
     if (c.brackets.empty())
     {
         LOG_ERROR("module", "mod-world-randomizer: Randomizer.Brackets has no valid bracket, using 1-80.");
         c.brackets.push_back({ 1, 80 });
     }
 
+    // Brackets should follow on from each other: a gap means some levels have no zone at all
+    for (std::size_t i = 1; i < c.brackets.size(); ++i)
+        if (c.brackets[i].levelMin > c.brackets[i - 1].levelMax + 1)
+            LOG_WARN("module", "mod-world-randomizer: Randomizer.Brackets has a gap between {}-{} and {}-{}.",
+                c.brackets[i - 1].levelMin, c.brackets[i - 1].levelMax, c.brackets[i].levelMin,
+                c.brackets[i].levelMax);
+
     uint32 scope = sConfigMgr->GetOption<uint32>("Randomizer.Scope", 0);
     c.scope = scope <= uint32(ShuffleScope::Expansion) ? ShuffleScope(scope) : ShuffleScope::Global;
     c.balanced = sConfigMgr->GetOption<bool>("Randomizer.Brackets.Balanced", false);
+    c.adjacent = sConfigMgr->GetOption<bool>("Randomizer.Brackets.Adjacent", true);
 
     c.replaceCreatures = sConfigMgr->GetOption<bool>("Randomizer.Creatures.Replace", true);
     c.sameEntrySameReplacement = sConfigMgr->GetOption<bool>("Randomizer.Creatures.SameEntrySameReplacement", true);
@@ -304,6 +318,17 @@ void WorldRandomizerMgr::LoadZones()
         _zoneIndex[zone.zoneId] = _zones.size();
         _zones.push_back(zone);
     } while (result->NextRow());
+
+    if (QueryResult links = WorldDatabase.Query("SELECT `zone_id`, `neighbour_id` FROM `world_randomizer_zone_link` "
+        "ORDER BY `zone_id`, `neighbour_id`"))
+    {
+        do
+        {
+            auto itr = _zoneIndex.find((*links)[0].Get<uint32>());
+            if (itr != _zoneIndex.end())
+                _zones[itr->second].neighbours.push_back((*links)[1].Get<uint32>());
+        } while (links->NextRow());
+    }
 }
 
 void WorldRandomizerMgr::Shuffle()
@@ -338,11 +363,51 @@ void WorldRandomizerMgr::Shuffle()
         for (std::size_t n = 0; n < members.size(); ++n)
             pool.push_back(_config.balanced ? uint8(n % bracketCount) : _zones[members[n]].homeBracket);
 
-        for (std::size_t n = pool.size(); n > 1; --n)
-            std::swap(pool[n - 1], pool[rng.Below(uint32(n))]);
+        if (!_config.adjacent)
+        {
+            for (std::size_t n = pool.size(); n > 1; --n)
+                std::swap(pool[n - 1], pool[rng.Below(uint32(n))]);
 
-        for (std::size_t n = 0; n < members.size(); ++n)
-            _zones[members[n]].bracket = pool[n];
+            for (std::size_t n = 0; n < members.size(); ++n)
+                _zones[members[n]].bracket = pool[n];
+            continue;
+        }
+
+        // Adjacent: start at a random zone and grow outwards through bordering zones, handing out the brackets
+        // lowest first. Neighbours end up with neighbouring brackets; where the zones run out (an island, the end
+        // of a continent) it jumps to a random zone that is still free.
+        std::sort(pool.begin(), pool.end());
+        std::vector<bool> assigned(_zones.size(), false);
+        std::vector<std::size_t> candidates;
+        for (std::size_t k = 0; k < pool.size(); ++k)
+        {
+            candidates.clear();
+            if (k)
+                for (std::size_t index : members)
+                {
+                    if (assigned[index])
+                        continue;
+
+                    for (uint32 neighbour : _zones[index].neighbours)
+                    {
+                        auto itr = _zoneIndex.find(neighbour);
+                        if (itr != _zoneIndex.end() && assigned[itr->second])
+                        {
+                            candidates.push_back(index);
+                            break;
+                        }
+                    }
+                }
+
+            if (candidates.empty())
+                for (std::size_t index : members)
+                    if (!assigned[index])
+                        candidates.push_back(index);
+
+            std::size_t chosen = candidates[rng.Below(uint32(candidates.size()))];
+            assigned[chosen] = true;
+            _zones[chosen].bracket = pool[k];
+        }
     }
 }
 

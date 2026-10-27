@@ -30,9 +30,11 @@ Randomizer.Seed = 0
 #                     puts it in a "home" bracket (the one holding the middle of its range); the shuffle then
 #                     hands the brackets out to random zones. Bracket 1 is where new characters start.
 #        Example:     "1-7,7-15,16-24,25-34,35-44,45-53,54-60" (the Classic video's brackets)
-#        Default:     "1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80"
+#                     They are sorted lowest first, and should follow on from each other (a gap means those levels
+#                     get no zone; the server log warns about it).
+#        Default:     "1-10,11-20,21-30,31-40,41-50,51-60,61-70,71-80"
 
-Randomizer.Brackets = "1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80"
+Randomizer.Brackets = "1-10,11-20,21-30,31-40,41-50,51-60,61-70,71-80"
 
 #
 #    Randomizer.Brackets.Balanced
@@ -41,6 +43,17 @@ Randomizer.Brackets = "1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80"
 #        Default:     0
 
 Randomizer.Brackets.Balanced = 0
+
+#
+#    Randomizer.Brackets.Adjacent
+#        Description: 1 = neighbouring zones get neighbouring brackets: the shuffle starts at a random zone and
+#                     grows outwards through bordering zones (`world_randomizer_zone_link`), lowest bracket first,
+#                     so you level across the map instead of jumping between a 1-10 and a 70-80 zone next door.
+#                     Over 200 seeds, neighbours end up 0.4 brackets apart on average (2.7 when fully random).
+#                     0 = fully random.
+#        Default:     1
+
+Randomizer.Brackets.Adjacent = 1
 
 #
 #    Randomizer.Scope

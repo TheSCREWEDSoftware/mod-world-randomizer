@@ -60,6 +60,19 @@
   </section>
 
   <section class="panel">
+    <h2>Allowed</h2>
+    <p class="muted" style="margin:0 0 10px">Only ticked factions, races and classes can be rolled. Death Knights
+      are off by default: they start at level 55 in Ebon Hold.</p>
+    <div class="allowed">
+      <div><div class="label">Factions</div><div id="allow-factions" class="checks"></div></div>
+      <div><div class="label">Races</div><div id="allow-races" class="checks"></div></div>
+      <div><div class="label">Classes</div><div id="allow-classes" class="checks"></div></div>
+    </div>
+    <p style="margin:10px 0 0"><button class="quiet" id="allow-all">Allow everything</button>
+      <button class="quiet" id="allow-default">Back to default</button></p>
+  </section>
+
+  <section class="panel">
     <div class="cards" id="cards"></div>
   </section>
 
@@ -125,9 +138,37 @@
 
   var ERA_ORDER = { vanilla: 0, tbc: 1, wrath: 2 };
   var STORAGE_KEY = 'wr-character';
+  var ALLOWED_KEY = 'wr-allowed';
+
+  function defaultAllowed() {
+    var allowed = { factions: { alliance: true, horde: true }, races: {}, classes: {} };
+    Object.keys(RACES).forEach(function (id) { allowed.races[id] = true; });
+    Object.keys(CLASSES).forEach(function (id) { allowed.classes[id] = Number(id) !== 6; }); // no Death Knights
+    return allowed;
+  }
+
+  function loadAllowed() {
+    var allowed = defaultAllowed();
+    try {
+      var saved = JSON.parse(localStorage.getItem(ALLOWED_KEY) || 'null');
+      if (saved) {
+        ['factions', 'races', 'classes'].forEach(function (group) {
+          Object.keys(saved[group] || {}).forEach(function (key) { allowed[group][key] = !!saved[group][key]; });
+        });
+      }
+    } catch (e) { /* storage blocked: defaults */ }
+    return allowed;
+  }
+
+  function saveAllowed() {
+    try { localStorage.setItem(ALLOWED_KEY, JSON.stringify(allowed)); } catch (e) { /* storage blocked */ }
+  }
+
+  var allowed = loadAllowed();
 
   var els = {};
-  ['era', 'faction', 'race', 'class', 'spec', 'profs', 'hardcore', 'roll', 'reset', 'cards', 'start', 'lockinfo']
+  ['era', 'faction', 'race', 'class', 'spec', 'profs', 'hardcore', 'roll', 'reset', 'cards', 'start', 'lockinfo',
+    'allow-factions', 'allow-races', 'allow-classes', 'allow-all', 'allow-default']
     .forEach(function (id) { els[id] = document.getElementById(id); });
 
   function inEra(item, era) {
@@ -152,14 +193,43 @@
 
   function races(era, faction) {
     return Object.keys(RACES).map(Number).filter(function (id) {
-      return inEra(RACES[id], era) && (faction === 'random' || RACES[id].faction === faction);
+      var race = RACES[id];
+      return inEra(race, era) && allowed.races[id] && allowed.factions[race.faction] &&
+        (faction === 'random' || race.faction === faction);
     });
   }
 
   function classes(era, raceId) {
     var list = raceId ? COMBOS[raceId] : Object.keys(CLASSES).map(Number);
-    return list.filter(function (id) { return inEra(CLASSES[id], era); });
+    return list.filter(function (id) { return inEra(CLASSES[id], era) && allowed.classes[id]; });
   }
+
+  function renderAllowed() {
+    function boxes(container, group, items) {
+      container.innerHTML = items.map(function (item) {
+        return '<label class="check"><input type="checkbox" data-group="' + group + '" data-key="' + item.key + '"' +
+          (allowed[group][item.key] ? ' checked' : '') + '> ' + item.label + '</label>';
+      }).join('');
+    }
+    boxes(els['allow-factions'], 'factions', [
+      { key: 'alliance', label: '<span class="alliance">Alliance</span>' },
+      { key: 'horde', label: '<span class="horde">Horde</span>' }
+    ]);
+    boxes(els['allow-races'], 'races', Object.keys(RACES).map(function (id) {
+      return { key: id, label: RACES[id].name + (RACES[id].since ? ' <span class="muted">(TBC+)</span>' : '') };
+    }));
+    boxes(els['allow-classes'], 'classes', Object.keys(CLASSES).map(function (id) {
+      return { key: id, label: CLASSES[id].name + (CLASSES[id].since ? ' <span class="muted">(Wrath)</span>' : '') };
+    }));
+  }
+
+  document.addEventListener('change', function (e) {
+    var box = e.target;
+    if (!box.getAttribute || !box.getAttribute('data-group')) return;
+    allowed[box.getAttribute('data-group')][box.getAttribute('data-key')] = box.checked;
+    saveAllowed();
+    refreshChoices();
+  });
 
   function fillSelect(select, ids, table, keep) {
     var previous = keep ? select.value : 'random';
@@ -193,7 +263,7 @@
     });
 
     if (!pairs.length) {
-      alertBox('That race and class can\'t go together in this era.');
+      alertBox('Nothing to roll: no allowed race and class go together with these choices in this era.');
       return;
     }
 
@@ -298,7 +368,18 @@
   els.race.addEventListener('change', refreshChoices);
   els.roll.addEventListener('click', roll);
   els.reset.addEventListener('click', function () { store(null); show(null); });
+  els['allow-all'].addEventListener('click', function () {
+    ['factions', 'races', 'classes'].forEach(function (group) {
+      Object.keys(allowed[group]).forEach(function (key) { allowed[group][key] = true; });
+    });
+    saveAllowed(); renderAllowed(); refreshChoices();
+  });
+  els['allow-default'].addEventListener('click', function () {
+    allowed = defaultAllowed();
+    saveAllowed(); renderAllowed(); refreshChoices();
+  });
 
+  renderAllowed();
   refreshChoices();
   var saved = restore();
   if (saved) {

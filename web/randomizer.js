@@ -32,7 +32,11 @@
       if (!low || low > high || high > MAX_LEVEL) return;
       brackets.push({ min: low, max: high });
     });
-    return brackets;
+    // Lowest first, whatever order they were typed in (stable, like std::stable_sort)
+    return brackets
+      .map(function (b, i) { return { b: b, i: i }; })
+      .sort(function (x, y) { return (x.b.min - y.b.min) || (x.b.max - y.b.max) || (x.i - y.i); })
+      .map(function (x) { return x.b; });
   }
 
   function homeBracket(brackets, levelMin, levelMax) {
@@ -53,7 +57,16 @@
     return best;
   }
 
-  // options: { seed, brackets, scope (0 global, 1 continent, 2 expansion), balanced }
+  // Brackets with a gap between them (some levels have no zone): [[prev, next], ...]
+  function bracketGaps(brackets) {
+    var gaps = [];
+    for (var i = 1; i < brackets.length; i++) {
+      if (brackets[i].min > brackets[i - 1].max + 1) gaps.push([brackets[i - 1], brackets[i]]);
+    }
+    return gaps;
+  }
+
+  // options: { seed, brackets, scope (0 global, 1 continent, 2 expansion), balanced, adjacent }
   // Returns the enabled zones sorted by id, each with home and bracket indexes.
   function shuffleZones(allZones, options) {
     var brackets = options.brackets;
@@ -62,6 +75,9 @@
       .filter(function (z) { return z.enabled && z.min > 0 && z.max >= z.min; })
       .map(function (z) { return Object.assign({}, z); })
       .sort(function (a, b) { return a.id - b.id; });
+
+    var indexById = {};
+    zones.forEach(function (zone, index) { indexById[zone.id] = index; });
 
     var groups = {};
     zones.forEach(function (zone, index) {
@@ -79,13 +95,39 @@
       var pool = members.map(function (index, n) {
         return options.balanced ? n % brackets.length : zones[index].home;
       });
-      for (var n = pool.length; n > 1; n--) {
-        var j = rng.below(n);
-        var swap = pool[n - 1];
-        pool[n - 1] = pool[j];
-        pool[j] = swap;
+      if (!options.adjacent) {
+        for (var n = pool.length; n > 1; n--) {
+          var j = rng.below(n);
+          var swap = pool[n - 1];
+          pool[n - 1] = pool[j];
+          pool[j] = swap;
+        }
+        members.forEach(function (index, n) { zones[index].bracket = pool[n]; });
+        return;
       }
-      members.forEach(function (index, n) { zones[index].bracket = pool[n]; });
+
+      // Adjacent: grow outwards from a random zone through bordering zones, lowest bracket first
+      pool.sort(function (a, b) { return a - b; });
+      var assigned = {};
+      for (var k = 0; k < pool.length; k++) {
+        var candidates = [];
+        if (k) {
+          members.forEach(function (index) {
+            if (assigned[index]) return;
+            var borders = (zones[index].n || []).some(function (neighbour) {
+              var other = indexById[neighbour];
+              return other !== undefined && assigned[other];
+            });
+            if (borders) candidates.push(index);
+          });
+        }
+        if (!candidates.length) {
+          members.forEach(function (index) { if (!assigned[index]) candidates.push(index); });
+        }
+        var chosen = candidates[rng.below(candidates.length)];
+        assigned[chosen] = true;
+        zones[chosen].bracket = pool[k];
+      }
     });
 
     return zones;
@@ -108,6 +150,7 @@
     parseBrackets: parseBrackets,
     homeBracket: homeBracket,
     shuffleZones: shuffleZones,
+    bracketGaps: bracketGaps,
     randomSeed: randomSeed
   };
 })(window);

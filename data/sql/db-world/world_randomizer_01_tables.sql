@@ -47,3 +47,9 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_classlevelstats` (
     `basemana` INT UNSIGNED NOT NULL,
     PRIMARY KEY (`era`, `class`, `level`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: player base health / mana per era';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_zone_link` (
+    `zone_id` INT UNSIGNED NOT NULL,
+    `neighbour_id` INT UNSIGNED NOT NULL,
+    PRIMARY KEY (`zone_id`, `neighbour_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: zones that border each other (Randomizer.Brackets.Adjacent)';

@@ -35,6 +35,12 @@
           <option value="2">Within each expansion</option>
         </select>
       </label>
+      <label class="field"><span>Neighbouring zones</span>
+        <select id="adjacent">
+          <option value="1">Neighbouring brackets</option>
+          <option value="0">Fully random</option>
+        </select>
+      </label>
       <label class="field"><span>Bracket sizes</span>
         <select id="balanced">
           <option value="0">Keep zone counts</option>
@@ -49,6 +55,7 @@
       </div>
     </div>
     <div class="legend" id="legend"></div>
+    <p id="gaps" style="margin:8px 0 0;color:#e8a33a"></p>
   </section>
 
   <section class="panel">
@@ -102,7 +109,7 @@
     { id: 2, name: 'Outland', map: '-2' },
     { id: 3, name: 'Northrend', map: '-5' }
   ];
-  var DEFAULT_BRACKETS = '1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80';
+  var DEFAULT_BRACKETS = '1-10,11-20,21-30,31-40,41-50,51-60,61-70,71-80';
   var DEFAULT_IMAGES = '../../static/images/wow/maps/enus/normal/';
   var TERRITORY = ['Alliance', 'Horde', 'Contested'];
 
@@ -112,7 +119,7 @@
 
   var state = load();
   var els = {};
-  ['seed', 'roll', 'brackets', 'scope', 'balanced', 'view', 'legend', 'tabs', 'mapimg', 'svg', 'imgbase',
+  ['seed', 'roll', 'brackets', 'scope', 'balanced', 'adjacent', 'gaps', 'view', 'legend', 'tabs', 'mapimg', 'svg', 'imgbase',
     'zonetable', 'snippet', 'copy', 'copied', 'starts', 'tooltip'].forEach(function (id) {
     els[id] = document.getElementById(id);
   });
@@ -126,6 +133,8 @@
       brackets: params.get('brackets') || saved.brackets || DEFAULT_BRACKETS,
       scope: params.has('scope') ? Number(params.get('scope')) : (saved.scope || 0),
       balanced: params.has('balanced') ? Number(params.get('balanced')) : (saved.balanced || 0),
+      adjacent: params.has('adjacent') ? Number(params.get('adjacent')) :
+        (saved.adjacent === undefined ? 1 : saved.adjacent),
       view: saved.view || 'shuffled',
       continent: saved.continent || 0,
       images: params.get('images') || saved.images || DEFAULT_IMAGES
@@ -154,7 +163,8 @@
     var brackets = R.parseBrackets(state.brackets);
     if (!brackets.length) brackets = [{ min: 1, max: 80 }];
     var zones = R.shuffleZones(ZONES, {
-      seed: state.seed >>> 0, brackets: brackets, scope: state.scope, balanced: !!state.balanced
+      seed: state.seed >>> 0, brackets: brackets, scope: state.scope, balanced: !!state.balanced,
+      adjacent: !!state.adjacent
     });
     var byId = {};
     zones.forEach(function (z) { byId[z.id] = z; });
@@ -171,6 +181,11 @@
     els.brackets.value = state.brackets;
     els.scope.value = String(state.scope);
     els.balanced.value = String(state.balanced);
+    els.adjacent.value = String(state.adjacent);
+    var gaps = R.bracketGaps(brackets);
+    els.gaps.textContent = gaps.length ? 'Gap between ' + gaps.map(function (g) {
+      return g[0].min + '-' + g[0].max + ' and ' + g[1].min + '-' + g[1].max;
+    }).join(', ') + ': those levels get no zone. Brackets should follow on from each other.' : '';
     els.imgbase.value = state.images;
     Array.prototype.forEach.call(els.view.children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-view') === state.view);
@@ -237,6 +252,7 @@
       'Randomizer.Seed = ' + (state.seed >>> 0),
       'Randomizer.Brackets = "' + brackets.map(function (b) { return b.min + '-' + b.max; }).join(',') + '"',
       'Randomizer.Brackets.Balanced = ' + (state.balanced ? 1 : 0),
+      'Randomizer.Brackets.Adjacent = ' + (state.adjacent ? 1 : 0),
       'Randomizer.Scope = ' + state.scope
     ].join('\n');
 
@@ -301,6 +317,7 @@
   els.brackets.addEventListener('change', function () { state.brackets = els.brackets.value; render(); });
   els.scope.addEventListener('change', function () { state.scope = Number(els.scope.value); render(); });
   els.balanced.addEventListener('change', function () { state.balanced = Number(els.balanced.value); render(); });
+  els.adjacent.addEventListener('change', function () { state.adjacent = Number(els.adjacent.value); render(); });
   els.imgbase.addEventListener('change', function () { state.images = els.imgbase.value || DEFAULT_IMAGES; render(); });
   els.view.addEventListener('click', function (e) {
     var view = e.target.getAttribute('data-view');

@@ -80,6 +80,7 @@ struct RandomizerZone
     uint8 territory = 2;  // 0 alliance, 1 horde, 2 contested
     bool shuffle = true;  // false = stays in its home bracket
     std::string name;
+    std::vector<uint32> neighbours; // zone ids that border this one
 
     // Filled by the shuffle
     uint8 homeBracket = 0;
@@ -93,6 +94,7 @@ struct RandomizerConfig
     std::vector<Bracket> brackets;
     ShuffleScope scope = ShuffleScope::Global;
     bool balanced = false;
+    bool adjacent = true; // neighbouring zones get neighbouring brackets
 
     bool replaceCreatures = true;
     bool sameEntrySameReplacement = true;
