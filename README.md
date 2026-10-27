@@ -86,7 +86,8 @@ Characters DB:
 - `world_randomizer_state`: the world seed.
 - `world_randomizer_hardcore`: every hardcore character, owner account, status, level, killer, death date.
 - `world_randomizer_hardcore_revive`: every restore, with the GM and the reason.
-- `world_randomizer_hardcore_taint`: characters that received mail or opened a trade, so they can't go hardcore.
+- `world_randomizer_hardcore_taint`: characters ruled out of going hardcore (a trade, a mail, reaching level 2, a
+  failed check), saved for good with the first reason; `allowed = 1` is an admin override (`.hardcore allow`).
 - `world_randomizer_coop` / `world_randomizer_coop_member`: co-op parties, their start point, and who joined.
 
 `tools/generate_from_aowow.py <aowow>/Stuff/zone-extract` rebuilds the zone SQL and `web/zones.js` after a new
@@ -106,6 +107,9 @@ aowow setup.
 | `.hardcore` | players | Your hardcore status |
 | `.hardcore on confirm` | players | Go hardcore (Mode 1): level 1, starting gear and money only, never mailed or traded |
 | `.hardcore fallen` | players | The last 10 hardcore deaths |
+| `.hardcore check <name or GUID>` | GM | What is saved about a character's hardcore eligibility |
+| `.hardcore allow <name or GUID>` | admin | Override: the character may go hardcore whatever the checks say |
+| `.hardcore block <name or GUID>` | admin | Take an override back, or rule a character out by hand |
 | `.hardcore restore <name or GUID> [reason]` | GM | Undo a death; lists the GUIDs when several dead characters share the name |
 
 ### Hardcore restore

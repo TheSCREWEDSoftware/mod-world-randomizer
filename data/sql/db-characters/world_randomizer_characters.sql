@@ -64,10 +64,14 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_coop_member` (
     KEY `idx_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: co-op party members';
 
--- Hardcore: characters that received mail or opened a trade before going hardcore, so they can't go hardcore.
+-- Hardcore: characters ruled out of going hardcore (a trade, a mail, a level up, a failed check), saved for good.
+-- `allowed` = 1 is an admin override (.hardcore allow): the character may go hardcore whatever the checks say.
 CREATE TABLE IF NOT EXISTS `world_randomizer_hardcore_taint` (
     `guid` INT UNSIGNED NOT NULL COMMENT 'characters.guid',
-    `reason` VARCHAR(16) NOT NULL DEFAULT '' COMMENT 'trade or mail',
+    `reason` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Why it was ruled out (the first reason)',
     `at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
+    `allowed` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1 = admin override',
+    `allowed_by` VARCHAR(32) NOT NULL DEFAULT '' COMMENT 'GM name or console',
+    `allowed_at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
     PRIMARY KEY (`guid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: characters ruled out of hardcore';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: hardcore eligibility';

@@ -10,7 +10,8 @@
  *
  * Going hardcore (.hardcore on confirm, Mode 1) is only for a fresh character: level 1, nothing but its starting gear
  * and starting money, and no mail received or trade made, ever. Mail and trades are remembered in
- * `world_randomizer_hardcore_taint` from the moment they happen.
+ * `world_randomizer_hardcore_taint` from the moment they happen, and any failed check is saved too: once a character
+ * is ruled out it stays ruled out, unless an admin overrides it with .hardcore allow <name or GUID>.
  *
  * A death caused by a bug can be undone with .hardcore revive <name> [reason]: the character is linked back to its
  * account (if it was soft deleted), comes back alive on its next login, and the revive is logged with who did it
@@ -122,11 +123,13 @@ public:
         _taints.clear();
 
         if (QueryResult taints = CharacterDatabase.Query(
-            "SELECT `guid`, `reason` FROM `world_randomizer_hardcore_taint`"))
+            "SELECT `guid`, `reason`, `allowed` FROM `world_randomizer_hardcore_taint`"))
         {
             do
             {
-                _taints[(*taints)[0].Get<uint32>()] = (*taints)[1].Get<std::string>();
+                Taint& taint = _taints[(*taints)[0].Get<uint32>()];
+                taint.reason = (*taints)[1].Get<std::string>();
+                taint.allowed = (*taints)[2].Get<bool>();
             } while (taints->NextRow());
         }
 
@@ -214,21 +217,57 @@ public:
             entry.softDeleted ? " (soft deleted)" : "", state);
     }
 
-    // A trade or a mail before going hardcore rules a character out for good
-    void Taint(ObjectGuid::LowType guid, char const* reason)
+    // Rules a character out of hardcore for good (saved), unless an admin allowed it. The first reason is kept.
+    void MarkIneligible(ObjectGuid::LowType guid, std::string reason)
     {
         if (!guid || _entries.count(guid) || _taints.count(guid))
             return;
 
-        _taints[guid] = reason;
+        if (reason.size() > 255)
+            reason.resize(255);
+
+        _taints[guid].reason = reason;
+        CharacterDatabase.EscapeString(reason);
         CharacterDatabase.Execute("INSERT IGNORE INTO `world_randomizer_hardcore_taint` (`guid`, `reason`, `at`) "
             "VALUES ({}, '{}', {})", guid, reason, GameTime::GetGameTime().count());
     }
 
-    // Everything that stops this character from going hardcore; empty = allowed
-    std::vector<std::string> CheckFreshStart(Player* player) const
+    // Admin override: this character may go hardcore whatever the checks say (or no longer may)
+    void SetAllowed(ObjectGuid::LowType guid, bool allowed, std::string const& by)
+    {
+        Taint& taint = _taints[guid];
+        taint.allowed = allowed;
+        if (taint.reason.empty())
+            taint.reason = allowed ? "allowed by an admin" : "blocked by an admin";
+
+        std::string reason = taint.reason;
+        std::string escapedBy = by;
+        CharacterDatabase.EscapeString(reason);
+        CharacterDatabase.EscapeString(escapedBy);
+        CharacterDatabase.Execute("INSERT INTO `world_randomizer_hardcore_taint` (`guid`, `reason`, `at`, `allowed`, "
+            "`allowed_by`, `allowed_at`) VALUES ({0}, '{1}', {2}, {3}, '{4}', {2}) ON DUPLICATE KEY UPDATE "
+            "`allowed` = {3}, `allowed_by` = '{4}', `allowed_at` = {2}", guid, reason, GameTime::GetGameTime().count(),
+            allowed ? 1 : 0, escapedBy);
+    }
+
+    // "allowed by an admin", "ruled out: <reason>" or "" (nothing saved)
+    std::string EligibilityNote(ObjectGuid::LowType guid) const
+    {
+        auto itr = _taints.find(guid);
+        if (itr == _taints.end())
+            return "";
+        return itr->second.allowed ? "allowed by an admin" : "ruled out: " + itr->second.reason;
+    }
+
+    // Everything that stops this character from going hardcore; empty = allowed. A failure is saved for good.
+    std::vector<std::string> CheckFreshStart(Player* player)
     {
         std::vector<std::string> problems;
+        ObjectGuid::LowType guid = player->GetGUID().GetCounter();
+
+        auto saved = _taints.find(guid);
+        if (saved != _taints.end() && saved->second.allowed)
+            return problems;
 
         if (player->GetLevel() != 1)
             problems.push_back(Acore::StringFormat("you are level {}, a hardcore run starts at level 1",
@@ -301,13 +340,20 @@ public:
         if (player->GetMoney() > sWorld->getIntConfig(CONFIG_START_PLAYER_MONEY))
             problems.push_back("you have more money than you started with");
 
-        auto taint = _taints.find(player->GetGUID().GetCounter());
-        if (taint != _taints.end())
-            problems.push_back(taint->second == "trade" ? "this character has traded with another player" :
-                "this character has received mail");
-        else if (player->GetMailSize() || CharacterDatabase.Query("SELECT 1 FROM `mail` WHERE `receiver` = {} LIMIT 1",
-            player->GetGUID().GetCounter()))
+        if (player->GetMailSize() ||
+            CharacterDatabase.Query("SELECT 1 FROM `mail` WHERE `receiver` = {} LIMIT 1", guid))
             problems.push_back("this character has received mail");
+
+        // Already ruled out earlier (a trade, a mail, a failed check): that stays, even if the cause is gone now
+        if (saved != _taints.end())
+            problems.insert(problems.begin(), "ruled out earlier: " + saved->second.reason);
+        else if (!problems.empty())
+        {
+            std::string reason;
+            for (std::string const& problem : problems)
+                reason += (reason.empty() ? "" : "; ") + problem;
+            MarkIneligible(guid, reason);
+        }
 
         return problems;
     }
@@ -596,7 +642,12 @@ private:
     }
 
     std::unordered_map<ObjectGuid::LowType, Entry> _entries;
-    std::unordered_map<ObjectGuid::LowType, std::string> _taints; // "trade" or "mail"
+    struct Taint
+    {
+        std::string reason;
+        bool allowed = false; // admin override
+    };
+    std::unordered_map<ObjectGuid::LowType, Taint> _taints;
     std::unordered_map<ObjectGuid::LowType, PendingDeath> _pending;
     std::unordered_map<ObjectGuid::LowType, uint32> _unlinkQueue;
 };
@@ -630,15 +681,25 @@ public:
         PLAYERHOOK_ON_LOGIN,
         PLAYERHOOK_ON_PLAYER_JUST_DIED,
         PLAYERHOOK_CAN_RESURRECT,
-        PLAYERHOOK_CAN_INIT_TRADE
+        PLAYERHOOK_CAN_INIT_TRADE,
+        PLAYERHOOK_ON_LEVEL_CHANGED
     }) { }
+
+    void OnPlayerLevelChanged(Player* player, uint8 /*oldLevel*/) override
+    {
+        if (sWorldRandomizer->Config().hardcoreMode == 1 && player->GetLevel() > 1)
+            sHardcore->MarkIneligible(player->GetGUID().GetCounter(), Acore::StringFormat("reached level {}",
+                player->GetLevel()));
+    }
 
     bool OnPlayerCanInitTrade(Player* player, Player* target) override
     {
         if (sWorldRandomizer->Config().hardcoreMode == 1)
         {
-            sHardcore->Taint(player->GetGUID().GetCounter(), "trade");
-            sHardcore->Taint(target->GetGUID().GetCounter(), "trade");
+            sHardcore->MarkIneligible(player->GetGUID().GetCounter(), Acore::StringFormat("traded with {}",
+                target->GetName()));
+            sHardcore->MarkIneligible(target->GetGUID().GetCounter(), Acore::StringFormat("traded with {}",
+                player->GetName()));
         }
         return true;
     }
@@ -677,7 +738,7 @@ public:
         uint32& /*customExpiration*/, bool& /*deleteMailItemsFromDB*/, bool& /*sendMail*/) override
     {
         if (sWorldRandomizer->Config().hardcoreMode == 1)
-            sHardcore->Taint(receiver.GetPlayerGUIDLow(), "mail");
+            sHardcore->MarkIneligible(receiver.GetPlayerGUIDLow(), "received mail");
     }
 };
 
@@ -707,7 +768,10 @@ public:
             { "on",     HandleOnCommand,     SEC_PLAYER,     Console::No },
             { "fallen", HandleFallenCommand, SEC_PLAYER,     Console::Yes },
             { "restore", HandleRestoreCommand, SEC_GAMEMASTER, Console::Yes },
-            { "revive",  HandleRestoreCommand, SEC_GAMEMASTER, Console::Yes }
+            { "revive",  HandleRestoreCommand, SEC_GAMEMASTER, Console::Yes },
+            { "allow",   HandleAllowCommand,   SEC_ADMINISTRATOR, Console::Yes },
+            { "block",   HandleBlockCommand,   SEC_ADMINISTRATOR, Console::Yes },
+            { "check",   HandleCheckCommand,   SEC_GAMEMASTER, Console::Yes }
         };
 
         static ChatCommandTable commandTable =
@@ -808,6 +872,66 @@ public:
                 fields[1].Get<uint8>(), killer.empty() ? "the world" : killer);
         } while (result->NextRow());
 
+        return true;
+    }
+
+    static ObjectGuid::LowType ResolveCharacter(ChatHandler* handler, std::string const& nameOrGuid)
+    {
+        if (Optional<uint32> guid = Acore::StringTo<uint32>(nameOrGuid))
+            if (sCharacterCache->GetCharacterCacheByGuid(ObjectGuid::Create<HighGuid::Player>(*guid)))
+                return *guid;
+
+        std::string name = nameOrGuid;
+        if (normalizePlayerName(name))
+            if (ObjectGuid guid = sCharacterCache->GetCharacterGuidByName(name))
+                return guid.GetCounter();
+
+        handler->SendErrorMessage(Acore::StringFormat("No character called {}.", nameOrGuid), false);
+        return 0;
+    }
+
+    static std::string GmName(ChatHandler* handler)
+    {
+        return handler->GetSession() ? handler->GetSession()->GetPlayerName() : "console";
+    }
+
+    // .hardcore allow <name or GUID>: an admin lets a ruled out character go hardcore anyway
+    static bool HandleAllowCommand(ChatHandler* handler, std::string nameOrGuid)
+    {
+        ObjectGuid::LowType guid = ResolveCharacter(handler, nameOrGuid);
+        if (!guid)
+            return false;
+
+        std::string before = sHardcore->EligibilityNote(guid);
+        sHardcore->SetAllowed(guid, true, GmName(handler));
+        handler->PSendSysMessage("{} (GUID {}) may now go hardcore with .hardcore on confirm, whatever the checks "
+            "say.{}", nameOrGuid, guid, before.empty() ? "" : " Before: " + before + ".");
+        return true;
+    }
+
+    // .hardcore block <name or GUID>: take an override back (or rule a character out by hand)
+    static bool HandleBlockCommand(ChatHandler* handler, std::string nameOrGuid)
+    {
+        ObjectGuid::LowType guid = ResolveCharacter(handler, nameOrGuid);
+        if (!guid)
+            return false;
+
+        sHardcore->SetAllowed(guid, false, GmName(handler));
+        handler->PSendSysMessage("{} (GUID {}) can't go hardcore: {}", nameOrGuid, guid,
+            sHardcore->EligibilityNote(guid));
+        return true;
+    }
+
+    // .hardcore check <name or GUID>: what is saved about a character's eligibility
+    static bool HandleCheckCommand(ChatHandler* handler, std::string nameOrGuid)
+    {
+        ObjectGuid::LowType guid = ResolveCharacter(handler, nameOrGuid);
+        if (!guid)
+            return false;
+
+        std::string note = sHardcore->EligibilityNote(guid);
+        handler->PSendSysMessage("{} (GUID {}): {}", nameOrGuid, guid, note.empty() ?
+            "nothing saved; the checks run when it tries .hardcore on" : note);
         return true;
     }
 

@@ -248,6 +248,9 @@ Randomizer.Coop.AutoGroup = 1
 #                     Choosing it (Mode 1) is only for a fresh character: level 1, nothing but its starting gear
 #                     and starting money, and no mail received or trade made, ever (both are remembered from the
 #                     moment they happen, in `world_randomizer_hardcore_taint`). .hardcore lists what is in the way.
+#                     A character that fails is saved as ruled out for good (reaching level 2 counts too), even if
+#                     the cause goes away. An admin can override that: .hardcore allow <name or GUID>
+#                     (and take it back with .hardcore block <name or GUID>).
 #        Default:     0 - off
 #                     1 - players choose: .hardcore on confirm (fresh level 1 characters only, can't be undone)
 #                     2 - every new character is hardcore
