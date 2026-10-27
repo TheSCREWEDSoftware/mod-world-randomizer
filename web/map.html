@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Randomizer Map</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>World Randomizer</h1>
+  <nav>
+    <a href="index.html">Character</a>
+    <a href="map.html" class="active">World map</a>
+  </nav>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Shuffle</h2>
+    <div class="controls">
+      <label class="field"><span>Seed</span>
+        <span style="display:flex;gap:6px">
+          <input type="number" id="seed" min="1" max="4294967295" style="width:150px">
+          <button id="roll" title="New random seed">Roll</button>
+        </span>
+      </label>
+      <label class="field" style="flex:1;min-width:260px"><span>Brackets (lowest first)</span>
+        <input type="text" id="brackets">
+      </label>
+      <label class="field"><span>Scope</span>
+        <select id="scope">
+          <option value="0">Whole world</option>
+          <option value="1">Within each continent</option>
+          <option value="2">Within each expansion</option>
+        </select>
+      </label>
+      <label class="field"><span>Bracket sizes</span>
+        <select id="balanced">
+          <option value="0">Keep zone counts</option>
+          <option value="1">Spread evenly</option>
+        </select>
+      </label>
+      <div class="field"><span>View</span>
+        <div class="segmented" id="view">
+          <button data-view="original">Original</button>
+          <button data-view="shuffled" class="on">Shuffled</button>
+        </div>
+      </div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="mapbox" id="mapbox">
+      <img id="mapimg" alt="">
+      <svg id="svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <label class="field" style="flex:1"><span>Map images folder (aowow's static/images/wow/maps/enus/normal/)</span>
+        <input type="text" id="imgbase">
+      </label>
+    </div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Zones</h2>
+      <table>
+        <thead><tr><th>Zone</th><th>Was</th><th>Now</th></tr></thead>
+        <tbody id="zonetable"></tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <h2>Server config</h2>
+      <p class="muted" style="margin-top:0">Paste into <code>mod-world-randomizer.conf</code> and restart the
+        worldserver to get exactly this world. The server must use the same zone list
+        (<code>world_randomizer_zone</code>).</p>
+      <pre class="snippet" id="snippet"></pre>
+      <p><button class="quiet" id="copy">Copy</button> <span id="copied" class="muted"></span></p>
+      <h2 style="margin-top:18px">Bracket 1 start zones</h2>
+      <div id="starts"></div>
+    </section>
+  </div>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script src="zones.js"></script>
+<script src="randomizer.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var R = window.WorldRandomizer;
+  var ZONES = window.RANDOMIZER_ZONES || [];
+  var OUTLINES = window.RANDOMIZER_OUTLINES || {};
+  var CONTINENTS = [
+    { id: 0, name: 'Eastern Kingdoms', map: '-3' },
+    { id: 1, name: 'Kalimdor', map: '-6' },
+    { id: 2, name: 'Outland', map: '-2' },
+    { id: 3, name: 'Northrend', map: '-5' }
+  ];
+  var DEFAULT_BRACKETS = '1-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80';
+  var DEFAULT_IMAGES = '../../static/images/wow/maps/enus/normal/';
+  var TERRITORY = ['Alliance', 'Horde', 'Contested'];
+
+  // Green -> orange -> red -> purple -> blue, like the bracket colours in the Classic video
+  var PALETTE = ['#2e7d32', '#7cb342', '#f9a825', '#ef6c00', '#c62828', '#8e24aa', '#3949ab', '#00acc1',
+    '#d4b106', '#757575'];
+
+  var state = load();
+  var els = {};
+  ['seed', 'roll', 'brackets', 'scope', 'balanced', 'view', 'legend', 'tabs', 'mapimg', 'svg', 'imgbase',
+    'zonetable', 'snippet', 'copy', 'copied', 'starts', 'tooltip'].forEach(function (id) {
+    els[id] = document.getElementById(id);
+  });
+
+  function load() {
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { saved = {}; }
+    var params = new URLSearchParams(location.search);
+    return {
+      seed: Number(params.get('seed')) || saved.seed || R.randomSeed(),
+      brackets: params.get('brackets') || saved.brackets || DEFAULT_BRACKETS,
+      scope: params.has('scope') ? Number(params.get('scope')) : (saved.scope || 0),
+      balanced: params.has('balanced') ? Number(params.get('balanced')) : (saved.balanced || 0),
+      view: saved.view || 'shuffled',
+      continent: saved.continent || 0,
+      images: params.get('images') || saved.images || DEFAULT_IMAGES
+    };
+  }
+
+  function save() {
+    try { localStorage.setItem('wr-map', JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+  }
+
+  function color(index, count) {
+    if (count <= PALETTE.length) return PALETTE[index];
+    var hue = 130 - (index / Math.max(1, count - 1)) * 330;
+    return 'hsl(' + ((hue + 360) % 360) + ', 65%, 45%)';
+  }
+
+  function ringsToPath(rings) {
+    return rings.map(function (ring) {
+      var d = '';
+      for (var i = 0; i + 1 < ring.length; i += 2) d += (i ? 'L' : 'M') + ring[i] + ' ' + ring[i + 1];
+      return d + 'Z';
+    }).join('');
+  }
+
+  function compute() {
+    var brackets = R.parseBrackets(state.brackets);
+    if (!brackets.length) brackets = [{ min: 1, max: 80 }];
+    var zones = R.shuffleZones(ZONES, {
+      seed: state.seed >>> 0, brackets: brackets, scope: state.scope, balanced: !!state.balanced
+    });
+    var byId = {};
+    zones.forEach(function (z) { byId[z.id] = z; });
+    return { brackets: brackets, zones: zones, byId: byId };
+  }
+
+  function render() {
+    var result = compute();
+    var brackets = result.brackets;
+    var shuffled = state.view === 'shuffled';
+
+    // Controls
+    els.seed.value = state.seed;
+    els.brackets.value = state.brackets;
+    els.scope.value = String(state.scope);
+    els.balanced.value = String(state.balanced);
+    els.imgbase.value = state.images;
+    Array.prototype.forEach.call(els.view.children, function (b) {
+      b.classList.toggle('on', b.getAttribute('data-view') === state.view);
+    });
+
+    // Legend
+    var counts = brackets.map(function () { return 0; });
+    result.zones.forEach(function (z) { counts[shuffled ? z.bracket : z.home]++; });
+    els.legend.innerHTML = brackets.map(function (b, i) {
+      return '<span class="chip"><span class="swatch" style="background:' + color(i, brackets.length) +
+        '"></span>B' + (i + 1) + ' &middot; Lv ' + b.min + '&ndash;' + b.max +
+        ' <span class="muted">(' + counts[i] + ')</span></span>';
+    }).join('');
+
+    // Tabs
+    els.tabs.innerHTML = '';
+    CONTINENTS.forEach(function (c) {
+      var b = document.createElement('button');
+      b.textContent = c.name;
+      b.className = c.id === state.continent ? '' : 'quiet';
+      b.onclick = function () { state.continent = c.id; save(); render(); };
+      els.tabs.appendChild(b);
+    });
+
+    // Map
+    var continent = CONTINENTS[state.continent];
+    var img = els.mapimg;
+    img.style.display = '';
+    img.onerror = function () { img.style.display = 'none'; };
+    img.src = state.images.replace(/\/?$/, '/') + continent.map + '.jpg';
+
+    var outlines = OUTLINES[continent.id] || {};
+    var svg = '';
+    Object.keys(outlines).forEach(function (zoneId) {
+      var outline = outlines[zoneId];
+      var zone = result.byId[zoneId];
+      var fill = '#6f6a62';
+      var opacity = 0.35;
+      if (zone) {
+        fill = color(shuffled ? zone.bracket : zone.home, brackets.length);
+        opacity = 0.62;
+      }
+      svg += '<path fill-rule="evenodd" data-zone="' + zoneId + '" fill="' + fill + '" fill-opacity="' + opacity +
+        '" d="' + ringsToPath(outline.p) + '"></path>';
+    });
+    els.svg.innerHTML = svg;
+
+    // Table: by new bracket, then name
+    var rows = result.zones.slice().sort(function (a, b) {
+      return (a.bracket - b.bracket) || a.name.localeCompare(b.name);
+    });
+    els.zonetable.innerHTML = rows.map(function (z) {
+      var was = brackets[z.home];
+      var now = brackets[z.bracket];
+      return '<tr><td>' + escapeHtml(z.name) + ' <span class="muted">' + CONTINENTS[z.continent].name + '</span></td>' +
+        '<td>' + z.min + '&ndash;' + z.max + '</td>' +
+        '<td><span class="swatch" style="background:' + color(z.bracket, brackets.length) + '"></span>B' +
+        (z.bracket + 1) + ' (' + now.min + '&ndash;' + now.max + ')' + (z.bracket === z.home ? '' : '') + '</td></tr>';
+    }).join('');
+
+    // Config snippet
+    els.snippet.textContent = [
+      'Randomizer.Enable = 1',
+      'Randomizer.Seed = ' + (state.seed >>> 0),
+      'Randomizer.Brackets = "' + brackets.map(function (b) { return b.min + '-' + b.max; }).join(',') + '"',
+      'Randomizer.Brackets.Balanced = ' + (state.balanced ? 1 : 0),
+      'Randomizer.Scope = ' + state.scope
+    ].join('\n');
+
+    // Start zones (lowest bracket)
+    var lowest = 0;
+    brackets.forEach(function (b, i) { if (b.min < brackets[lowest].min) lowest = i; });
+    var starts = result.zones.filter(function (z) { return z.bracket === lowest; });
+    var alliance = starts.filter(function (z) { return z.territory === 0; });
+    var horde = starts.filter(function (z) { return z.territory === 1; });
+    var contested = starts.filter(function (z) { return z.territory === 2; });
+    function list(zones) {
+      return zones.length ? zones.map(function (z) { return escapeHtml(z.name); }).join(', ') : '<span class="muted">none</span>';
+    }
+    els.starts.innerHTML =
+      '<p><b class="alliance">Alliance:</b> ' + list(alliance.length ? alliance : contested) +
+      (alliance.length ? '' : ' <span class="muted">(no Alliance zone landed here, so contested zones)</span>') + '</p>' +
+      '<p><b class="horde">Horde:</b> ' + list(horde.length ? horde : contested) +
+      (horde.length ? '' : ' <span class="muted">(no Horde zone landed here, so contested zones)</span>') + '</p>' +
+      '<p class="muted">Only zones that have a graveyard for your faction are used in game.</p>';
+
+    save();
+    els._result = result;
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // Tooltip
+  els.svg.addEventListener('mousemove', function (e) {
+    var path = e.target.closest('path');
+    if (!path) { els.tooltip.style.display = 'none'; return; }
+    var zoneId = path.getAttribute('data-zone');
+    var outline = (OUTLINES[state.continent] || {})[zoneId] || {};
+    var result = els._result;
+    var zone = result.byId[zoneId];
+    var html = '<b>' + escapeHtml(zone ? zone.name : outline.name || 'Zone ' + zoneId) + '</b><br>';
+    if (zone) {
+      var b = result.brackets[zone.bracket];
+      html += 'Original: Level ' + zone.min + ' &ndash; ' + zone.max + '<br>' +
+        'Shuffled: B' + (zone.bracket + 1) + ' &middot; Level ' + b.min + ' &ndash; ' + b.max + '<br>' +
+        '<span class="muted">' + TERRITORY[zone.territory] + (zone.shuffle ? '' : ' &middot; pinned') + '</span>';
+    } else {
+      html += '<span class="muted">Not shuffled (city or disabled)</span>';
+    }
+    els.tooltip.innerHTML = html;
+    els.tooltip.style.display = 'block';
+    els.tooltip.style.left = (e.clientX + 14) + 'px';
+    els.tooltip.style.top = (e.clientY + 14) + 'px';
+  });
+  els.svg.addEventListener('mouseleave', function () { els.tooltip.style.display = 'none'; });
+
+  // Inputs
+  els.seed.addEventListener('change', function () {
+    var value = Math.floor(Number(els.seed.value));
+    state.seed = value >= 1 && value <= 4294967295 ? value : state.seed;
+    render();
+  });
+  els.roll.addEventListener('click', function () { state.seed = R.randomSeed(); render(); });
+  els.brackets.addEventListener('change', function () { state.brackets = els.brackets.value; render(); });
+  els.scope.addEventListener('change', function () { state.scope = Number(els.scope.value); render(); });
+  els.balanced.addEventListener('change', function () { state.balanced = Number(els.balanced.value); render(); });
+  els.imgbase.addEventListener('change', function () { state.images = els.imgbase.value || DEFAULT_IMAGES; render(); });
+  els.view.addEventListener('click', function (e) {
+    var view = e.target.getAttribute('data-view');
+    if (view) { state.view = view; render(); }
+  });
+  els.copy.addEventListener('click', function () {
+    var text = els.snippet.textContent;
+    var done = function () { els.copied.textContent = 'Copied.'; setTimeout(function () { els.copied.textContent = ''; }, 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () {});
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

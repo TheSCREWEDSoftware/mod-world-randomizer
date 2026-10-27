@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Randomizer Character</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>World Randomizer</h1>
+  <nav>
+    <a href="index.html" class="active">Character</a>
+    <a href="map.html">World map</a>
+  </nav>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Roll a character</h2>
+    <div class="controls">
+      <label class="field"><span>Era</span>
+        <select id="era">
+          <option value="wrath">Wrath of the Lich King</option>
+          <option value="tbc">The Burning Crusade</option>
+          <option value="vanilla">Vanilla</option>
+        </select>
+      </label>
+      <label class="field"><span>Faction</span>
+        <select id="faction">
+          <option value="random">Random</option>
+          <option value="alliance">Alliance</option>
+          <option value="horde">Horde</option>
+        </select>
+      </label>
+      <label class="field"><span>Race</span><select id="race"></select></label>
+      <label class="field"><span>Class</span><select id="class"></select></label>
+      <label class="field"><span>Spec</span>
+        <select id="spec">
+          <option value="random">Random</option>
+          <option value="no">Don't roll</option>
+        </select>
+      </label>
+      <label class="field"><span>Professions</span>
+        <select id="profs">
+          <option value="random">Random (two)</option>
+          <option value="no">Don't roll</option>
+        </select>
+      </label>
+      <label class="field"><span>Rules</span>
+        <select id="hardcore">
+          <option value="1">Hardcore: one roll, no rerolls</option>
+          <option value="0">Reroll as much as you like</option>
+        </select>
+      </label>
+      <button id="roll">Roll</button>
+      <button id="reset" class="quiet" title="Clears a locked hardcore roll">Start over</button>
+    </div>
+    <p id="lockinfo" class="muted" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="panel">
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Where you start</h2>
+    <div id="start" class="muted"></div>
+  </section>
+</main>
+
+<script src="zones.js"></script>
+<script src="randomizer.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var R = window.WorldRandomizer;
+
+  var RACES = {
+    1: { name: 'Human', faction: 'alliance' },
+    2: { name: 'Orc', faction: 'horde' },
+    3: { name: 'Dwarf', faction: 'alliance' },
+    4: { name: 'Night Elf', faction: 'alliance' },
+    5: { name: 'Undead', faction: 'horde' },
+    6: { name: 'Tauren', faction: 'horde' },
+    7: { name: 'Gnome', faction: 'alliance' },
+    8: { name: 'Troll', faction: 'horde' },
+    10: { name: 'Blood Elf', faction: 'horde', since: 'tbc' },
+    11: { name: 'Draenei', faction: 'alliance', since: 'tbc' }
+  };
+
+  var CLASSES = {
+    1: { name: 'Warrior', specs: ['Arms', 'Fury', 'Protection'] },
+    2: { name: 'Paladin', specs: ['Holy', 'Protection', 'Retribution'] },
+    3: { name: 'Hunter', specs: ['Beast Mastery', 'Marksmanship', 'Survival'] },
+    4: { name: 'Rogue', specs: ['Assassination', 'Combat', 'Subtlety'] },
+    5: { name: 'Priest', specs: ['Discipline', 'Holy', 'Shadow'] },
+    6: { name: 'Death Knight', specs: ['Blood', 'Frost', 'Unholy'], since: 'wrath' },
+    7: { name: 'Shaman', specs: ['Elemental', 'Enhancement', 'Restoration'] },
+    8: { name: 'Mage', specs: ['Arcane', 'Fire', 'Frost'] },
+    9: { name: 'Warlock', specs: ['Affliction', 'Demonology', 'Destruction'] },
+    11: { name: 'Druid', specs: ['Balance', 'Feral', 'Restoration'] }
+  };
+
+  // Race -> classes in 3.3.5. Vanilla and TBC are the same minus Death Knights (and minus the TBC races).
+  var COMBOS = {
+    1: [1, 2, 4, 5, 6, 8, 9],
+    2: [1, 3, 4, 6, 7, 9],
+    3: [1, 2, 3, 4, 5, 6],
+    4: [1, 3, 4, 5, 6, 11],
+    5: [1, 4, 5, 6, 8, 9],
+    6: [1, 3, 6, 7, 11],
+    7: [1, 4, 6, 8, 9],
+    8: [1, 3, 4, 5, 6, 7, 8],
+    10: [2, 3, 4, 5, 6, 8, 9],
+    11: [1, 2, 3, 5, 6, 7, 8]
+  };
+
+  var PROFESSIONS = [
+    { name: 'Alchemy' }, { name: 'Blacksmithing' }, { name: 'Enchanting' }, { name: 'Engineering' },
+    { name: 'Herbalism' }, { name: 'Inscription', since: 'wrath' }, { name: 'Jewelcrafting', since: 'tbc' },
+    { name: 'Leatherworking' }, { name: 'Mining' }, { name: 'Skinning' }, { name: 'Tailoring' }
+  ];
+
+  var ERA_ORDER = { vanilla: 0, tbc: 1, wrath: 2 };
+  var STORAGE_KEY = 'wr-character';
+
+  var els = {};
+  ['era', 'faction', 'race', 'class', 'spec', 'profs', 'hardcore', 'roll', 'reset', 'cards', 'start', 'lockinfo']
+    .forEach(function (id) { els[id] = document.getElementById(id); });
+
+  function inEra(item, era) {
+    return !item.since || ERA_ORDER[era] >= ERA_ORDER[item.since];
+  }
+
+  function pick(list) {
+    var rng = new R.Rng(R.randomSeed());
+    return list[rng.below(list.length)];
+  }
+
+  function store(value) {
+    try {
+      if (value) localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+      else localStorage.removeItem(STORAGE_KEY);
+    } catch (e) { /* storage blocked: the roll just isn't remembered */ }
+  }
+
+  function restore() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (e) { return null; }
+  }
+
+  function races(era, faction) {
+    return Object.keys(RACES).map(Number).filter(function (id) {
+      return inEra(RACES[id], era) && (faction === 'random' || RACES[id].faction === faction);
+    });
+  }
+
+  function classes(era, raceId) {
+    var list = raceId ? COMBOS[raceId] : Object.keys(CLASSES).map(Number);
+    return list.filter(function (id) { return inEra(CLASSES[id], era); });
+  }
+
+  function fillSelect(select, ids, table, keep) {
+    var previous = keep ? select.value : 'random';
+    select.innerHTML = '<option value="random">Random</option>' + ids.map(function (id) {
+      return '<option value="' + id + '">' + table[id].name + '</option>';
+    }).join('');
+    select.value = ids.indexOf(Number(previous)) >= 0 ? previous : 'random';
+  }
+
+  function refreshChoices() {
+    var era = els.era.value;
+    fillSelect(els.race, races(era, els.faction.value), RACES, true);
+    var raceId = els.race.value === 'random' ? 0 : Number(els.race.value);
+    var classIds = raceId ? classes(era, raceId) : Array.from(new Set(races(era, els.faction.value)
+      .reduce(function (all, r) { return all.concat(classes(era, r)); }, []))).sort(function (a, b) { return a - b; });
+    fillSelect(els['class'], classIds, CLASSES, true);
+  }
+
+  function roll() {
+    var era = els.era.value;
+    var faction = els.faction.value;
+
+    // Race and class must make a valid pair, so roll from the valid pairs
+    var pairs = [];
+    races(era, faction).forEach(function (raceId) {
+      if (els.race.value !== 'random' && Number(els.race.value) !== raceId) return;
+      classes(era, raceId).forEach(function (classId) {
+        if (els['class'].value !== 'random' && Number(els['class'].value) !== classId) return;
+        pairs.push([raceId, classId]);
+      });
+    });
+
+    if (!pairs.length) {
+      alertBox('That race and class can\'t go together in this era.');
+      return;
+    }
+
+    var pair = pick(pairs);
+    var result = {
+      era: era,
+      race: pair[0],
+      cls: pair[1],
+      gender: pick(['m', 'f']),
+      spec: els.spec.value === 'random' ? pick(CLASSES[pair[1]].specs) : '',
+      profs: []
+    };
+
+    if (els.profs.value === 'random') {
+      var pool = PROFESSIONS.filter(function (p) { return inEra(p, era); }).map(function (p) { return p.name; });
+      var first = pick(pool);
+      var second = pick(pool.filter(function (p) { return p !== first; }));
+      result.profs = [first, second];
+    }
+
+    result.locked = els.hardcore.value === '1';
+    store(result);
+    show(result);
+  }
+
+  function alertBox(text) {
+    els.cards.innerHTML = '<p class="muted">' + text + '</p>';
+  }
+
+  function card(label, value, sub, image) {
+    return '<div class="card' + (value ? '' : ' empty') + '"><div class="label">' + label + '</div>' +
+      (image ? '<img src="' + image + '" alt="">' : '<div style="height:116px"></div>') +
+      '<div class="value">' + (value || '&mdash;') + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '') +
+      '</div>';
+  }
+
+  function show(result) {
+    if (!result) {
+      els.cards.innerHTML = card('Race', '', '', '') + card('Class', '', '', '') + card('Spec', '', '', '') +
+        card('Professions', '', '', '');
+      els.start.innerHTML = 'Roll a character first.';
+      els.lockinfo.textContent = '';
+      els.roll.disabled = false;
+      return;
+    }
+
+    var race = RACES[result.race];
+    var cls = CLASSES[result.cls];
+    var factionName = race.faction === 'alliance' ? '<span class="alliance">Alliance</span>' :
+      '<span class="horde">Horde</span>';
+
+    els.cards.innerHTML =
+      card('Race', race.name, factionName + ' &middot; ' + (result.gender === 'm' ? 'Male' : 'Female'),
+        'img/race/' + result.race + result.gender + '.webp') +
+      card('Class', cls.name, '', 'img/class/' + result.cls + '.webp') +
+      card('Spec', result.spec, result.spec ? cls.name : 'not rolled', '') +
+      card('Professions', result.profs.join(' &amp; '), result.profs.length ? '' : 'not rolled', '');
+
+    els.roll.disabled = !!result.locked;
+    els.lockinfo.innerHTML = result.locked ?
+      '<span class="locked">Hardcore roll locked.</span> One life, no rerolls. "Start over" clears it.' : '';
+
+    showStart(result);
+  }
+
+  function showStart(result) {
+    if (result.cls === 6) {
+      els.start.innerHTML = 'Death Knights start in Acherus: The Ebon Hold as usual.';
+      return;
+    }
+
+    var settings = {};
+    try { settings = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { settings = {}; }
+    if (!settings.seed) {
+      els.start.innerHTML = 'Open the <a href="map.html">world map</a> to pick a seed; your start zone depends on it.';
+      return;
+    }
+
+    var brackets = R.parseBrackets(settings.brackets || '');
+    if (!brackets.length) brackets = [{ min: 1, max: 80 }];
+    var zones = R.shuffleZones(window.RANDOMIZER_ZONES || [], {
+      seed: settings.seed >>> 0, brackets: brackets, scope: settings.scope || 0, balanced: !!settings.balanced
+    });
+
+    var lowest = 0;
+    brackets.forEach(function (b, i) { if (b.min < brackets[lowest].min) lowest = i; });
+    var team = RACES[result.race].faction === 'alliance' ? 0 : 1;
+    var own = zones.filter(function (z) { return z.bracket === lowest && z.territory === team; });
+    var contested = zones.filter(function (z) { return z.bracket === lowest && z.territory === 2; });
+    var candidates = own.length ? own : contested;
+
+    els.start.innerHTML = candidates.length ?
+      'With seed <b>' + settings.seed + '</b> you start in one of: <b>' + candidates.map(function (z) {
+        return z.name;
+      }).join(', ') + '</b> (bracket 1, ' + brackets[lowest].min + '&ndash;' + brackets[lowest].max + ').' +
+      (own.length ? '' : ' No zone of your faction landed in bracket 1, so these are contested zones.') :
+      'No bracket 1 zone fits your faction with this seed; the server falls back to the normal start.';
+  }
+
+  els.era.addEventListener('change', refreshChoices);
+  els.faction.addEventListener('change', refreshChoices);
+  els.race.addEventListener('change', refreshChoices);
+  els.roll.addEventListener('click', roll);
+  els.reset.addEventListener('click', function () { store(null); show(null); });
+
+  refreshChoices();
+  var saved = restore();
+  if (saved) {
+    els.era.value = saved.era;
+    refreshChoices();
+  }
+  show(saved);
+})();
+</script>
+</body>
+</html>
