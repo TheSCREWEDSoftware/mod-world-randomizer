@@ -62,11 +62,11 @@ enum RandomizerAchReward : uint8
 //   client -> server  "DEF"              achievement definitions
 //                     "GET" / "GET\t<name>"  progress of you / a party member
 //   server -> client  "C\t<category>\t<name>"
-//                     "D\t<id>\t<category>\t<icon>\t<name>\t<reward text>"
+//                     "D\t<id>\t<category>\t<icon>\t<name>\t<reward text>\t<expansion mask>\t<parent id>"
 //                     "T\t<id>\t<description>"
 //                     "S\t<name>\t<done>\t<total>\t<deaths>\t<zones>\t<quests>\t<rares>\t<gold>\t<level cap>"
 //                     "P\t<id>:<done 0/1>:<progress>:<required>,..."
-//                     "E\t<DEF|GET>\t<count or name>"   end of a reply;  "X\t<error>"
+//                     "E\tDEF\t<count>\t<expansion 1-3>" / "E\tGET\t<name>"   end of a reply;  "X\t<error>"
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
 
 namespace WorldRandomizerAchievements

@@ -56,6 +56,9 @@ namespace
         std::string name;
         std::string description;
         std::string icon;
+        uint8 expansionMask = 0; // 1 Vanilla, 2 TBC, 4 Wrath, 0 = every expansion
+        uint32 parentId = 0;     // versions of the same achievement share a parent (0 / own id = the base)
+        bool active = true;      // made for the server's current content
         uint8 criteria = 0;
         uint32 value = 0;
         uint32 arg = 0;
@@ -183,6 +186,8 @@ public:
     uint32 deathMinLevel = 10;
     uint32 healthRegenSpell = 150110;
     uint32 manaRegenSpell = 150111;
+    uint8 expansionSetting = 0;
+    uint8 expansion = 3; // 1 Vanilla, 2 TBC, 3 Wrath
 
     void LoadConfig()
     {
@@ -193,10 +198,21 @@ public:
         deathMinLevel = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.DeathMinLevel", 10);
         healthRegenSpell = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.HealthRegenSpell", 150110);
         manaRegenSpell = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.ManaRegenSpell", 150111);
+
+        expansionSetting = std::min<uint8>(3, sConfigMgr->GetOption<uint8>("Randomizer.Achievements.Expansion", 0));
     }
 
     void Load()
     {
+        // The content achievements are made for: its own setting, or the stats era, or Wrath. Worked out here, once
+        // every module's config is loaded.
+        expansion = expansionSetting;
+        if (!expansion)
+        {
+            StatEra era = sWorldRandomizer->Config().era;
+            expansion = era == StatEra::Unchanged ? 3 : uint8(era);
+        }
+
         _defs.clear();
         _order.clear();
         _byCriteria.clear();
@@ -204,9 +220,9 @@ public:
 
         //                                                   0     1             2                3       4
         QueryResult result = WorldDatabase.Query("SELECT `id`, `category`, `category_name`, `name`, `criteria`, "
-            //   5        6      7              8
-            "`value`, `arg`, `description`, `icon` FROM `world_randomizer_achievement` WHERE `enabled` = 1 "
-            "ORDER BY `category`, `id`");
+            //   5        6      7              8       9            10
+            "`value`, `arg`, `description`, `icon`, `expansion`, `parent_id` FROM `world_randomizer_achievement` "
+            "WHERE `enabled` = 1 ORDER BY `category`, `id`");
         if (result)
         {
             do
@@ -222,6 +238,9 @@ public:
                 def.arg = fields[6].Get<uint32>();
                 def.description = fields[7].Get<std::string>();
                 def.icon = fields[8].Get<std::string>();
+                def.expansionMask = fields[9].Get<uint8>();
+                def.parentId = fields[10].Get<uint32>();
+                def.active = !def.expansionMask || (def.expansionMask & (1 << (expansion - 1)));
                 _order.push_back(def.id);
                 _defs[def.id] = def;
             } while (result->NextRow());
@@ -247,8 +266,15 @@ public:
             } while (rewards->NextRow());
         }
 
+        _activeCount = 0;
         for (auto const& [id, def] : _defs)
+        {
+            if (!def.active)
+                continue;
+
             _byCriteria[def.criteria].push_back(id);
+            ++_activeCount;
+        }
 
         if (QueryResult zones = WorldDatabase.Query(
             "SELECT `zone_id` FROM `world_randomizer_zone` WHERE `enabled` = 1"))
@@ -264,7 +290,9 @@ public:
                 LOG_ERROR("module", "mod-world-randomizer: achievement aura spell {} is missing from `spell_dbc`.",
                     spell);
 
-        LOG_INFO("module", "mod-world-randomizer: {} achievements loaded.", _defs.size());
+        static char const* const EXPANSIONS[] = { "", "Vanilla", "TBC", "Wrath" };
+        LOG_INFO("module", "mod-world-randomizer: {} achievements loaded, {} for {}.", _defs.size(), _activeCount,
+            EXPANSIONS[expansion]);
     }
 
     // ---- State ----
@@ -411,7 +439,7 @@ public:
                 uint32 done = 0;
                 for (auto const& [id, other] : _defs)
                 {
-                    if (other.category != def.arg || other.criteria == ACH_CRITERIA_CATEGORY)
+                    if (!other.active || other.category != def.arg || other.criteria == ACH_CRITERIA_CATEGORY)
                         continue;
                     ++total;
                     done += state.done.count(id);
@@ -494,7 +522,7 @@ public:
         for (uint32 id : state.done)
         {
             auto itr = _defs.find(id);
-            if (itr == _defs.end())
+            if (itr == _defs.end() || !itr->second.active)
                 continue;
 
             for (RandomizerRewardDef const& reward : itr->second.rewards)
@@ -685,7 +713,7 @@ public:
 
         if (!state.done.empty())
             handler.PSendSysMessage("|cffFFD100[Achievements]|r Your account's achievements gave this character its "
-                "start rewards ({} achievements done).", state.done.size());
+                "start rewards ({} achievements done).", DoneCount(state));
     }
 
     void SetChoice(Player* player, uint32 skill)
@@ -703,7 +731,18 @@ public:
         return itr != _defs.end() ? &itr->second : nullptr;
     }
 
-    std::size_t Count() const { return _defs.size(); }
+    // Achievements for the current content, and how many of them an account has done
+    std::size_t Count() const { return _activeCount; }
+    std::size_t DoneCount(RandomizerAccountState const& state) const
+    {
+        std::size_t done = 0;
+        for (uint32 id : state.done)
+        {
+            auto itr = _defs.find(id);
+            done += itr != _defs.end() && itr->second.active;
+        }
+        return done;
+    }
 
     // ---- Addon ----
 
@@ -740,13 +779,13 @@ public:
             for (RandomizerRewardDef const& reward : def.rewards)
                 rewards += (rewards.empty() ? "" : ", ") + reward.text;
 
-            SendAddon(player, Acore::StringFormat("D\t{}\t{}\t{}\t{}\t{}", def.id, def.category, Clean(def.icon),
-                Clean(def.name), Clean(rewards)));
+            SendAddon(player, Acore::StringFormat("D\t{}\t{}\t{}\t{}\t{}\t{}\t{}", def.id, def.category,
+                Clean(def.icon), Clean(def.name), Clean(rewards), def.expansionMask, def.parentId));
             if (!def.description.empty())
                 SendAddon(player, Acore::StringFormat("T\t{}\t{}", def.id, Clean(def.description)));
         }
 
-        SendAddon(player, Acore::StringFormat("E\tDEF\t{}", _order.size()));
+        SendAddon(player, Acore::StringFormat("E\tDEF\t{}\t{}", _order.size(), expansion));
     }
 
     void SendProgress(Player* player, Player* target)
@@ -756,13 +795,16 @@ public:
         uint32 cap = baseLevelCap ? baseLevelCap + state.perks.levelCap : 0;
 
         SendAddon(player, Acore::StringFormat("S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", target->GetName(),
-            state.done.size(), _defs.size(), state.counters["deaths"], state.zones.size(), run.quests,
+            DoneCount(state), _activeCount, state.counters["deaths"], state.zones.size(), run.quests,
             run.rares.size(), run.maxMoney / GOLD, cap));
 
         std::string chunk;
         for (uint32 id : _order)
         {
             RandomizerAchDef const& def = _defs[id];
+            if (!def.active)
+                continue;
+
             bool done = state.done.count(id) != 0;
             uint32 required = Required(def);
             uint32 progress = done ? required : std::min(Progress(target, def, 0), required);
@@ -848,6 +890,7 @@ public:
 private:
     std::unordered_map<uint32, RandomizerAchDef> _defs;
     std::vector<uint32> _order;
+    std::size_t _activeCount = 0;
     std::unordered_map<uint8, std::vector<uint32>> _byCriteria;
     std::unordered_set<uint32> _zoneList;
     std::unordered_map<uint32, RandomizerAccountState> _accounts;
@@ -955,7 +998,7 @@ public:
         {
             RandomizerAccountState& state = sRandomizerAch->Account(player);
             ChatHandler(player->GetSession()).PSendSysMessage("  Achievements: {}/{} done on this account (.rach)",
-                state.done.size(), sRandomizerAch->Count());
+                sRandomizerAch->DoneCount(state), sRandomizerAch->Count());
         }
     }
 
@@ -1274,7 +1317,7 @@ public:
         RandomizerPerks const& p = state.perks;
 
         handler->PSendSysMessage("|cffFFD100Achievements|r: {}/{} done on this account. .rach list [category] shows "
-            "them.", state.done.size(), sRandomizerAch->Count());
+            "them.", sRandomizerAch->DoneCount(state), sRandomizerAch->Count());
         handler->SendSysMessage("Your account's rewards, on every character:");
         if (p.xpPct > 0.0f)
             handler->PSendSysMessage("  XP +{:.0f}%", p.xpPct);
@@ -1317,7 +1360,7 @@ public:
         for (uint32 id : sRandomizerAch->Order())
         {
             RandomizerAchDef const* def = sRandomizerAch->Find(id);
-            if (!def || (category && def->category != *category))
+            if (!def || !def->active || (category && def->category != *category))
                 continue;
 
             if (def->category != lastCategory)

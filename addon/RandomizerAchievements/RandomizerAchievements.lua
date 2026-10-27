@@ -10,7 +10,7 @@ local ROWS = 8
 
 RandomizerAchievementsDB = RandomizerAchievementsDB or {}
 
-local defs = {}          -- [id] = { cat, icon, name, reward, desc }
+local defs = {}          -- [id] = { cat, icon, name, reward, desc, exp (mask), parent }
 local order = {}         -- ids in server order
 local categories = {}    -- { { id, name } }
 local progress = {}      -- [name] = { stats = {...}, ach = { [id] = { done, prog, req } } }
@@ -18,6 +18,38 @@ local incoming = {}      -- progress being received, per name
 local selectedCategory = 0
 local viewing = UnitName("player")
 local defsLoaded = false
+local expansion = 3      -- the server's content: 1 Vanilla, 2 TBC, 3 Wrath
+local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
+
+-- Made for the server's current content?
+local function IsActive(def)
+    if not def.exp or def.exp == 0 then return true end
+    local bit = 2 ^ (expansion - 1)
+    return def.exp % (bit * 2) >= bit
+end
+
+local function ExpansionText(mask)
+    if not mask or mask == 0 then return "every expansion" end
+    local names = {}
+    for i = 1, 3 do
+        local bit = 2 ^ (i - 1)
+        if mask % (bit * 2) >= bit then table.insert(names, EXPANSION_NAMES[i]) end
+    end
+    return table.concat(names, ", ")
+end
+
+-- The other versions of an achievement (same parent), for the tooltip
+local function Versions(id)
+    local def = defs[id]
+    local base = (def.parent and def.parent > 0) and def.parent or id
+    local list = {}
+    for _, other in ipairs(order) do
+        local o = defs[other]
+        local oBase = (o.parent and o.parent > 0) and o.parent or other
+        if other ~= id and oBase == base then table.insert(list, other) end
+    end
+    return list
+end
 
 local function Send(body)
     SendAddonMessage(PREFIX, body, "WHISPER", UnitName("player"))
@@ -132,6 +164,30 @@ for i = 1, ROWS do
     row.bar.text = row.bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.bar.text:SetPoint("CENTER")
 
+    -- Hover: which content this version is for, and the other versions
+    row:EnableMouse(true)
+    row:SetScript("OnEnter", function(self)
+        local def = self.id and defs[self.id]
+        if not def then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(def.name, 1, 0.82, 0)
+        if def.desc ~= "" then GameTooltip:AddLine(def.desc, 1, 1, 1, true) end
+        if def.reward ~= "" then GameTooltip:AddLine(def.reward, 0.1, 1, 0.1, true) end
+        GameTooltip:AddLine("This version: " .. ExpansionText(def.exp), 0.53, 0.53, 1)
+        local versions = Versions(self.id)
+        if #versions > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Other versions:", 1, 0.82, 0)
+            for _, other in ipairs(versions) do
+                local o = defs[other]
+                GameTooltip:AddLine(ExpansionText(o.exp) .. ": " .. (o.reward ~= "" and o.reward or o.name),
+                    0.7, 0.7, 0.7, true)
+            end
+        end
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     rows[i] = row
 end
 
@@ -170,7 +226,7 @@ local Request
 local function VisibleIds()
     local list = {}
     for _, id in ipairs(order) do
-        if selectedCategory == 0 or defs[id].cat == selectedCategory then
+        if IsActive(defs[id]) and (selectedCategory == 0 or defs[id].cat == selectedCategory) then
             table.insert(list, id)
         end
     end
@@ -193,7 +249,11 @@ local function UpdateRows()
             row.icon:SetTexture("Interface\\Icons\\" .. (def.icon ~= "" and def.icon or "INV_Misc_QuestionMark"))
             row.icon:SetDesaturated(not done)
             if done then row.check:Show() else row.check:Hide() end
-            row.name:SetText(def.name)
+            local tag = ""
+            if def.exp and def.exp ~= 0 then tag = " |cff8888ff[" .. ExpansionText(def.exp) .. "]|r" end
+            if #Versions(id) > 0 then tag = tag .. " |cff999999(+" .. #Versions(id) .. " versions)|r" end
+            row.name:SetText(def.name .. tag)
+            row.id = id
             if done then row.name:SetTextColor(1, 0.82, 0) else row.name:SetTextColor(0.9, 0.9, 0.9) end
             row.reward:SetText(def.reward ~= "" and def.reward or "")
             row.desc:SetText(def.desc or "")
@@ -225,7 +285,7 @@ local function UpdateCategories()
         local button = CategoryButton(index)
         local done, total = 0, 0
         for _, id in ipairs(order) do
-            if cat[1] == 0 or defs[id].cat == cat[1] then
+            if IsActive(defs[id]) and (cat[1] == 0 or defs[id].cat == cat[1]) then
                 total = total + 1
                 if data and data.ach[id] and data.ach[id].done then done = done + 1 end
             end
@@ -271,7 +331,7 @@ end
 
 local function UpdateSummary()
     local data = progress[viewing]
-    title:SetText("Randomizer Achievements - " .. viewing)
+    title:SetText("Randomizer Achievements - " .. viewing .. "  |cff8888ff(" .. EXPANSION_NAMES[expansion] .. ")|r")
     if not data then
         summary:SetText(defsLoaded and "Asking the server..." or "Loading the achievement list...")
         return
@@ -313,7 +373,7 @@ local function OnMessage(message)
         local id = tonumber(parts[2])
         if not defs[id] then table.insert(order, id) end
         defs[id] = { cat = tonumber(parts[3]), icon = parts[4] or "", name = parts[5] or "", reward = parts[6] or "",
-            desc = defs[id] and defs[id].desc or "" }
+            exp = tonumber(parts[7]) or 0, parent = tonumber(parts[8]) or 0, desc = defs[id] and defs[id].desc or "" }
     elseif kind == "T" then
         local id = tonumber(parts[2])
         if defs[id] then defs[id].desc = parts[3] or "" end
@@ -336,6 +396,7 @@ local function OnMessage(message)
     elseif kind == "E" then
         if parts[2] == "DEF" then
             defsLoaded = true
+            expansion = tonumber(parts[4]) or 3
             Request(viewing)
         elseif parts[2] == "GET" then
             local name = parts[3]

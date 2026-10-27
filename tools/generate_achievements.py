@@ -6,7 +6,8 @@ Criteria and reward numbers are explained in src/WorldRandomizerAchievements.h.
 """
 from pathlib import Path
 
-rows=[]   # (id, category, category_name, name, criteria, value, arg, enabled, description, icon)
+rows=[]   # (id, category, category_name, name, criteria, value, arg, enabled, description, icon, expansion, parent)
+VANILLA, TBC, WRATH = 1, 2, 4   # `expansion` is a mask: add them up, 0 = every expansion
 rewards=[] # (achievement_id, idx, type, value, arg, arg2, text)
 SCOPE={1:'Any character on your account.',2:'Lifetime, every character on your account.',3:'One character, in one life.',4:'One character, in one life: gold held at once.',5:'Any character on your account.',6:'Lifetime, every character on your account, at level 10 or higher.',7:'One character, in one life: different rare creatures.',8:'Any character.',9:'Any character on your account.',10:'Lifetime, every character on your account.',11:'Lifetime, every character on your account.',12:'Any character on your account.',13:'Every other achievement in this category.'}
 WEAPON_ICONS={95:'Ability_Defend',44:'INV_Axe_01',43:'INV_Sword_04',54:'INV_Mace_01',172:'INV_Axe_09',55:'INV_Sword_06',160:'INV_Hammer_05',45:'INV_Weapon_Bow_05',226:'INV_Weapon_Crossbow_01',229:'INV_Spear_06',473:'INV_Gauntlets_04',136:'INV_Staff_08',162:'Ability_Warrior_Revenge',176:'INV_ThrowingAxe_01',228:'INV_Wand_01'}
@@ -19,8 +20,9 @@ def icon_for(cat, crit, value, arg):
     if crit==10 and arg in PROF_ICONS: return PROF_ICONS[arg]
     if crit==13: return 'Achievement_General'
     return CAT_ICONS.get(cat,'INV_Misc_QuestionMark')
-def ach(id_, cat, catname, name, crit, value=0, arg=0, rew=(), enabled=1):
-    rows.append((id_, cat, catname, name, crit, value, arg, enabled, SCOPE.get(crit,''), icon_for(cat,crit,value,arg)))
+def ach(id_, cat, catname, name, crit, value=0, arg=0, rew=(), enabled=1, expansion=0, parent=0, desc=None):
+    rows.append((id_, cat, catname, name, crit, value, arg, enabled, desc if desc is not None else SCOPE.get(crit,''),
+                 icon_for(cat,crit,value,arg), expansion, parent))
     for i,r in enumerate(rew):
         t,v,a,a2,txt = (list(r)+[0,0,0,''])[:5] if len(r)<5 else r
         rewards.append((id_, i, t, v, a, a2, txt))
@@ -31,11 +33,18 @@ LEVEL,ZONES,QUESTS,GOLD,HP,DEATHS,RARES,HIGHER,SKILL,GATHER,CRAFT,SPELLC,CATEGOR
 
 # 1 Levels
 for i,l in enumerate(range(10,90,10)):
-    ach(100+i+1,1,'Levels',f'Reach level {l} on any character',LEVEL,l,0,[(XP,50,0,0,'XP +50%'),(NONE,0,0,0,'4 Zones Corrupted')])
+    ach(100+i+1,1,'Levels',f'Reach level {l} on any character',LEVEL,l,0,[(XP,50,0,0,'XP +50%'),(NONE,0,0,0,'4 Zones Corrupted')],
+        expansion=(TBC|WRATH) if l==70 else (WRATH if l==80 else 0))
 # 2 Zone discovery
 for i,n in enumerate([10,20,30]):
     ach(201+i,2,'Zone Discovery',f'Discover {n} different zones',ZONES,n,0,[(CAP,1,0,0,'+1 Max Level Cap')])
-ach(204,2,'Zone Discovery','Discover all zones',ZONES,0,0,[(LVLSPELL,0,33391,60,'Free lvl 60 mount at 60 (Journeyman Riding)'),(TITLE,0,78,0,'Title: the Explorer')])
+# One achievement, three versions: the riding each expansion had
+ach(204,2,'Zone Discovery','Discover all zones',ZONES,0,0,[(LVLSPELL,0,33391,60,'Free level 60 mount (Journeyman Riding at 60)'),(TITLE,0,78,0,'Title: the Explorer')],
+    expansion=VANILLA,parent=204,desc='Lifetime, every character on your account. Vanilla version: the epic mount at 60.')
+ach(205,2,'Zone Discovery','Discover all zones',ZONES,0,0,[(LVLSPELL,0,34090,70,'Free level 70 flying (Expert Riding at 70)'),(TITLE,0,78,0,'Title: the Explorer')],
+    expansion=TBC,parent=204,desc='Lifetime, every character on your account. TBC version: flying at 70.')
+ach(206,2,'Zone Discovery','Discover all zones',ZONES,0,0,[(LVLSPELL,0,33391,40,'Free level 40 mount (Journeyman Riding at 40)'),(TITLE,0,78,0,'Title: the Explorer')],
+    expansion=WRATH,parent=204,desc='Lifetime, every character on your account. Wrath version: the epic mount at 40.')
 # 3 Questing
 for i,n in enumerate([5,10,25,50,100]):
     ach(301+i,3,'Questing',f'Complete {n} quests in a single run',QUESTS,n,0,[(TAL,0.1,0,0,'+0.1 Talent Point Gain')]+([(TITLE,0,125,0,'Title: Loremaster')] if n==100 else []))
@@ -121,8 +130,8 @@ out=["-- mod-world-randomizer: achievements and their rewards (account-wide; see
 "-- the criteria / reward numbers). Rows with `enabled` = 0 need features the module doesn't have yet",
 "-- (corrupted / treasure zones, flawless dungeon runs); their rewards with type 0 are text only.",
 "DELETE FROM `world_randomizer_achievement` WHERE `id` BETWEEN 100 AND 1999;",
-"INSERT INTO `world_randomizer_achievement` (`id`, `category`, `category_name`, `name`, `description`, `icon`, `criteria`, `value`, `arg`, `enabled`) VALUES",
-",\n".join(f"({r[0]}, {r[1]}, {q(r[2])}, {q(r[3])}, {q(r[8])}, {q(r[9])}, {r[4]}, {r[5]}, {r[6]}, {r[7]})" for r in rows)+";",
+"INSERT INTO `world_randomizer_achievement` (`id`, `category`, `category_name`, `name`, `description`, `icon`, `expansion`, `parent_id`, `criteria`, `value`, `arg`, `enabled`) VALUES",
+",\n".join(f"({r[0]}, {r[1]}, {q(r[2])}, {q(r[3])}, {q(r[8])}, {q(r[9])}, {r[10]}, {r[11]}, {r[4]}, {r[5]}, {r[6]}, {r[7]})" for r in rows)+";",
 "",
 "DELETE FROM `world_randomizer_achievement_reward` WHERE `achievement_id` BETWEEN 100 AND 1999;",
 "INSERT INTO `world_randomizer_achievement_reward` (`achievement_id`, `idx`, `type`, `value`, `arg`, `arg2`, `text`) VALUES",

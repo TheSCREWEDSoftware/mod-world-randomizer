@@ -159,6 +159,13 @@ deletes skills a race / class may not have (SkillRaceClassInfo.dbc) when it load
 their values at logout and puts them back. Start items and gold from achievements count as starting gear for the
 hardcore fresh-start check.
 
+Each achievement also has an `expansion` mask (1 Vanilla, 2 TBC, 4 Wrath, added up; 0 = every expansion) and a
+`parent_id`: versions of the same achievement share a parent (0 or the row's own id is the base). Only the versions
+for `Randomizer.Achievements.Expansion` count (by default it follows the stats era); the addon shows the content
+of each version and lists the others when you hover it. Shipped examples: "Reach level 70" is TBC + Wrath, "Reach
+level 80" Wrath only, and "Discover all zones" has three versions (Vanilla: epic mount at 60, TBC: flying at 70,
+Wrath: epic mount at 40).
+
 Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach profession [name]`.
 
 ### The addon

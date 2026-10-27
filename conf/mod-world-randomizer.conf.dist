@@ -307,6 +307,19 @@ Randomizer.Hardcore.Announce = 1
 Randomizer.Achievements.Enable = 1
 
 #
+#    Randomizer.Achievements.Expansion
+#        Description: Which content's achievements count. Each achievement has an `expansion` mask (1 Vanilla,
+#                     2 TBC, 4 Wrath, 0 = all); versions of one achievement share a `parent_id` (the "Discover all
+#                     zones" mount is the epic mount at 60 in Vanilla, flying at 70 in TBC, the epic mount at 40 in
+#                     Wrath). Only the versions for this content count; the addon shows the others on hover.
+#        Default:     0 - follow Randomizer.Stats.Era (Wrath when that is 0)
+#                     1 - Vanilla
+#                     2 - TBC
+#                     3 - Wrath
+
+Randomizer.Achievements.Expansion = 0
+
+#
 #    Randomizer.Achievements.Announce
 #        Description: Tell the player when an achievement is done, with its rewards, and the count on login.
 #        Default:     1

@@ -1,5 +1,7 @@
 -- mod-world-randomizer: achievement definitions (world DB). Criteria / reward type numbers:
 -- see src/WorldRandomizerAchievements.h. `icon` is a texture name from Interface\Icons (shown by the addon).
+-- Only achievements whose `expansion` matches Randomizer.Achievements.Expansion count; the addon shows the other
+-- versions (same `parent_id`) as alternatives.
 CREATE TABLE IF NOT EXISTS `world_randomizer_achievement` (
     `id` INT UNSIGNED NOT NULL,
     `category` TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -7,6 +9,8 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_achievement` (
     `name` VARCHAR(128) NOT NULL DEFAULT '',
     `description` VARCHAR(255) NOT NULL DEFAULT '',
     `icon` VARCHAR(64) NOT NULL DEFAULT 'INV_Misc_QuestionMark',
+    `expansion` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Content it is for: 1 Vanilla, 2 TBC, 4 Wrath (add up), 0 = all',
+    `parent_id` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Versions of one achievement share a parent; 0 or own id = the base',
     `criteria` TINYINT UNSIGNED NOT NULL DEFAULT 0,
     `value` INT UNSIGNED NOT NULL DEFAULT 0,
     `arg` INT UNSIGNED NOT NULL DEFAULT 0,
