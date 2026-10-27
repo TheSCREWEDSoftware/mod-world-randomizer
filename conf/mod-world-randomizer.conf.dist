@@ -4,16 +4,34 @@
 # mod-world-randomizer configuration
 ########################################
 #
-# The shuffle is built once at startup. Changes here need a worldserver restart.
-# Nothing is written to the creature tables, so Randomizer.Enable = 0 brings the normal world back.
+# Everything is set up once at startup. Changes here need a worldserver restart.
+# Nothing is written to the creature tables, so Randomizer.World.Enable = 0 brings the normal world back.
 
 #
 #    Randomizer.Enable
-#        Description: Shuffle the world.
+#        Description: Master switch for the whole module (world shuffle, stats era, hardcore, co-op).
+#                     Each feature also has its own switch below.
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Enable = 1
+
+#
+#    Randomizer.Announce
+#        Description: On login, tell the player this server runs the module, with a line for each feature
+#                     that is on (world shuffle and seed, stats era and XP rate, hardcore, co-op).
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Announce = 1
+
+#
+#    Randomizer.World.Enable
+#        Description: Shuffle the world: zones into brackets, creatures, dungeon levels, start zones.
 #        Default:     0 - disabled
 #                     1 - enabled
 
-Randomizer.Enable = 0
+Randomizer.World.Enable = 0
 
 #
 #    Randomizer.Seed
@@ -54,6 +72,16 @@ Randomizer.Brackets.Balanced = 0
 #        Default:     1
 
 Randomizer.Brackets.Adjacent = 1
+
+#
+#    Randomizer.Brackets.FactionStarts
+#        Description: Make sure the Alliance and the Horde each get one of their own zones in bracket 1, so new
+#                     characters don't all start in contested zones. If a faction has none after the shuffle,
+#                     its lowest zone swaps brackets with a contested bracket 1 zone. Without this, both factions
+#                     get one in about 1 seed out of 8.
+#        Default:     1
+
+Randomizer.Brackets.FactionStarts = 1
 
 #
 #    Randomizer.Scope
@@ -124,14 +152,32 @@ Randomizer.Creatures.ExcludeEntries = ""
 Randomizer.Creatures.ComputeMissingZones = 1
 
 #
-#    Randomizer.Dungeons.ShiftLevels
-#        Description: Dungeon creatures move by as many levels as their entrance zone's bracket moved.
-#                     The entrance zone comes from the area trigger that teleports into the dungeon;
-#                     `world_randomizer_instance` can override it.
-#                     If mod-dynamic-scaling also runs, set DynamicScaling.Instance.LevelScaling.Enable = 0.
-#        Default:     1
+#    Randomizer.Dungeons.Mode
+#        Description: How dungeon and raid creatures follow the bracket their entrance zone landed in.
+#                     The entrance zone comes from the area trigger that teleports into the instance;
+#                     `world_randomizer_instance` sets it for city entrances (RFC, the Stockade, the Violet Hold).
+#                     With the collective below active, mod-dynamic-scaling does this instead (and adds its
+#                     Simple mode buff), whatever this is set to.
+#        Default:     2 - scale to the group, inside the bracket: creatures move to the highest player's level but
+#                         never leave the bracket (RFC in a 31-40 bracket scales between 31 and 40). Bosses stay
+#                         above their trash. Levels are picked when creatures spawn.
+#                     1 - fixed shift: every creature moves by as many levels as the entrance zone's bracket moved
+#                     0 - unchanged
 
-Randomizer.Dungeons.ShiftLevels = 1
+Randomizer.Dungeons.Mode = 2
+
+#
+#    Randomizer.Collective.DynamicScaling
+#        Description: Work together with mod-dynamic-scaling. Only takes effect when that module is installed and
+#                     enabled and its own switch DynamicScaling.Collective.WorldRandomizer is on too (and the world
+#                     shuffle is on here). Then this module hands every dungeon's bracket (from its entrance zone)
+#                     to mod-dynamic-scaling, which scales the dungeon in Simple mode inside that bracket: Ragefire
+#                     Chasm in a 31-40 bracket scales between 31 and 40. This module stops shifting dungeon levels
+#                     itself, and mod-dynamic-scaling leaves the open world to this module.
+#        Default:     1 - enabled
+#                     0 - disabled (the two modules ignore each other)
+
+Randomizer.Collective.DynamicScaling = 1
 
 #
 #    Randomizer.PlayerStart.Enable
@@ -157,11 +203,48 @@ Randomizer.PlayerStart.FactionLock = 1
 Randomizer.PlayerStart.SkipDeathKnights = 1
 
 #
+#    Randomizer.Coop.Enable
+#        Description: Co-op starts. One player types .coop create and gets a 6 letter code; friends type
+#                     .coop join <code> and start in the same place (a random bracket 1 zone when the world
+#                     shuffle is on), with their hearthstone there and in the leader's group.
+#        Default:     1
+
+Randomizer.Coop.Enable = 1
+
+#
+#    Randomizer.Coop.MaxSize
+#        Description: Players per co-op code, the leader included.
+#        Default:     5
+
+Randomizer.Coop.MaxSize = 5
+
+#
+#    Randomizer.Coop.MaxLevel
+#        Description: Highest level at which a player may create or join a co-op party.
+#        Default:     1
+
+Randomizer.Coop.MaxLevel = 1
+
+#
+#    Randomizer.Coop.SameFaction
+#        Description: Only players of the leader's faction may join.
+#        Default:     1
+
+Randomizer.Coop.SameFaction = 1
+
+#
+#    Randomizer.Coop.AutoGroup
+#        Description: Joining puts the player in the leader's group when the leader is online.
+#        Default:     1
+
+Randomizer.Coop.AutoGroup = 1
+
+#
 #    Randomizer.Hardcore.Mode
 #        Description: One life. A hardcore character that dies is never deleted for good: it is kept in the
 #                     characters DB and listed in `world_randomizer_hardcore` with its owner account and how it
 #                     died. A GM can undo a bugged death with .hardcore restore <name or GUID> [reason].
-#                     Works with Randomizer.Enable = 0 too.
+#                     Works with Randomizer.World.Enable = 0 too.
 #        Default:     0 - off
 #                     1 - players choose: .hardcore on confirm (only up to OptInMaxLevel, can't be undone)
 #                     2 - every new character is hardcore
@@ -216,7 +299,7 @@ Randomizer.Hardcore.Announce = 1
 #
 #    Randomizer.Stats.Era
 #        Description: Player base stats (Str, Agi, Sta, Int, Spi, base health and mana) per level.
-#                     This works with Randomizer.Enable = 0 too.
+#                     Works with Randomizer.World.Enable = 0 too.
 #        Default:     0 - unchanged (AzerothCore, normal XP)
 #                     1 - Vanilla (vMaNGOS)       levels 1-60, then AzerothCore's growth
 #                     2 - TBC     (cMaNGOS-TBC)   levels 1-70, then AzerothCore's growth

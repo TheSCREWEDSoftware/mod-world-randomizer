@@ -66,7 +66,7 @@
     return gaps;
   }
 
-  // options: { seed, brackets, scope (0 global, 1 continent, 2 expansion), balanced, adjacent }
+  // options: { seed, brackets, scope (0 global, 1 continent, 2 expansion), balanced, adjacent, factionStarts }
   // Returns the enabled zones sorted by id, each with home and bracket indexes.
   function shuffleZones(allZones, options) {
     var brackets = options.brackets;
@@ -130,7 +130,36 @@
       }
     });
 
+    if (options.factionStarts) ensureFactionStarts(zones, options.scope);
     return zones;
+  }
+
+  function groupKey(zone, scope) {
+    if (scope === 1) return zone.continent;
+    if (scope === 2) return zone.expansion;
+    return 0;
+  }
+
+  // Same as WorldRandomizerMgr::EnsureFactionStarts: each faction gets one of its own zones in bracket 0
+  function ensureFactionStarts(zones, scope) {
+    [0, 1].forEach(function (team) {
+      var present = zones.some(function (z) { return z.bracket === 0 && z.territory === team; });
+      if (present) return;
+      var own = null;
+      zones.forEach(function (z) {
+        if (z.shuffle && z.territory === team && (!own || z.bracket < own.bracket)) own = z;
+      });
+      if (!own) return;
+      for (var i = 0; i < zones.length; i++) {
+        var z = zones[i];
+        if (z.shuffle && z.bracket === 0 && z.territory === 2 && groupKey(z, scope) === groupKey(own, scope)) {
+          var swap = z.bracket;
+          z.bracket = own.bracket;
+          own.bracket = swap;
+          break;
+        }
+      }
+    });
   }
 
   function randomSeed() {

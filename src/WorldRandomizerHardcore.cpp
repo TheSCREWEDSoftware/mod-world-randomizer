@@ -115,7 +115,8 @@ public:
         //                                                       0       1          2       3       4        5
         QueryResult result = CharacterDatabase.Query("SELECT `guid`, `account`, `name`, `race`, `class`, `gender`, "
             //   6        7         8               9                 10         11
-            "`level`, `status`, `soft_deleted`, `revive_pending`, `revives`, `died_at` FROM `world_randomizer_hardcore`");
+            "`level`, `status`, `soft_deleted`, `revive_pending`, `revives`, `died_at` "
+            "FROM `world_randomizer_hardcore`");
         if (!result)
             return;
 
@@ -218,7 +219,8 @@ public:
         _entries[player->GetGUID().GetCounter()] = entry;
 
         CharacterDatabase.Execute("REPLACE INTO `world_randomizer_hardcore` (`guid`, `account`, `name`, `race`, "
-            "`class`, `gender`, `level`, `status`, `started_at`, `seed`) VALUES ({}, {}, '{}', {}, {}, {}, {}, 0, {}, {})",
+            "`class`, `gender`, `level`, `status`, `started_at`, `seed`) "
+            "VALUES ({}, {}, '{}', {}, {}, {}, {}, 0, {}, {})",
             player->GetGUID().GetCounter(), entry.account, entry.name, entry.race, entry.cls, entry.gender, entry.level,
             GameTime::GetGameTime().count(), sWorldRandomizer->GetSeed());
 

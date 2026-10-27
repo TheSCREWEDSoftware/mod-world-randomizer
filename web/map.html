@@ -41,6 +41,12 @@
           <option value="0">Fully random</option>
         </select>
       </label>
+      <label class="field"><span>Faction starts</span>
+        <select id="factionStarts">
+          <option value="1">Each faction gets a bracket 1 zone</option>
+          <option value="0">Leave it to the shuffle</option>
+        </select>
+      </label>
       <label class="field"><span>Bracket sizes</span>
         <select id="balanced">
           <option value="0">Keep zone counts</option>
@@ -119,7 +125,7 @@
 
   var state = load();
   var els = {};
-  ['seed', 'roll', 'brackets', 'scope', 'balanced', 'adjacent', 'gaps', 'view', 'legend', 'tabs', 'mapimg', 'svg', 'imgbase',
+  ['seed', 'roll', 'brackets', 'scope', 'balanced', 'adjacent', 'factionStarts', 'gaps', 'view', 'legend', 'tabs', 'mapimg', 'svg', 'imgbase',
     'zonetable', 'snippet', 'copy', 'copied', 'starts', 'tooltip'].forEach(function (id) {
     els[id] = document.getElementById(id);
   });
@@ -135,6 +141,8 @@
       balanced: params.has('balanced') ? Number(params.get('balanced')) : (saved.balanced || 0),
       adjacent: params.has('adjacent') ? Number(params.get('adjacent')) :
         (saved.adjacent === undefined ? 1 : saved.adjacent),
+      factionStarts: params.has('factionStarts') ? Number(params.get('factionStarts')) :
+        (saved.factionStarts === undefined ? 1 : saved.factionStarts),
       view: saved.view || 'shuffled',
       continent: saved.continent || 0,
       images: params.get('images') || saved.images || DEFAULT_IMAGES
@@ -164,7 +172,7 @@
     if (!brackets.length) brackets = [{ min: 1, max: 80 }];
     var zones = R.shuffleZones(ZONES, {
       seed: state.seed >>> 0, brackets: brackets, scope: state.scope, balanced: !!state.balanced,
-      adjacent: !!state.adjacent
+      adjacent: !!state.adjacent, factionStarts: !!state.factionStarts
     });
     var byId = {};
     zones.forEach(function (z) { byId[z.id] = z; });
@@ -182,6 +190,7 @@
     els.scope.value = String(state.scope);
     els.balanced.value = String(state.balanced);
     els.adjacent.value = String(state.adjacent);
+    els.factionStarts.value = String(state.factionStarts);
     var gaps = R.bracketGaps(brackets);
     els.gaps.textContent = gaps.length ? 'Gap between ' + gaps.map(function (g) {
       return g[0].min + '-' + g[0].max + ' and ' + g[1].min + '-' + g[1].max;
@@ -249,10 +258,12 @@
     // Config snippet
     els.snippet.textContent = [
       'Randomizer.Enable = 1',
+      'Randomizer.World.Enable = 1',
       'Randomizer.Seed = ' + (state.seed >>> 0),
       'Randomizer.Brackets = "' + brackets.map(function (b) { return b.min + '-' + b.max; }).join(',') + '"',
       'Randomizer.Brackets.Balanced = ' + (state.balanced ? 1 : 0),
       'Randomizer.Brackets.Adjacent = ' + (state.adjacent ? 1 : 0),
+      'Randomizer.Brackets.FactionStarts = ' + (state.factionStarts ? 1 : 0),
       'Randomizer.Scope = ' + state.scope
     ].join('\n');
 
@@ -318,6 +329,9 @@
   els.scope.addEventListener('change', function () { state.scope = Number(els.scope.value); render(); });
   els.balanced.addEventListener('change', function () { state.balanced = Number(els.balanced.value); render(); });
   els.adjacent.addEventListener('change', function () { state.adjacent = Number(els.adjacent.value); render(); });
+  els.factionStarts.addEventListener('change', function () {
+    state.factionStarts = Number(els.factionStarts.value); render();
+  });
   els.imgbase.addEventListener('change', function () { state.images = els.imgbase.value || DEFAULT_IMAGES; render(); });
   els.view.addEventListener('click', function (e) {
     var view = e.target.getAttribute('data-view');

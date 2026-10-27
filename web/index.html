@@ -77,6 +77,40 @@
   </section>
 
   <section class="panel">
+    <h2>Co-op party</h2>
+    <p class="muted" style="margin-top:0">Roll a whole party of the same faction and share one code with your friends:
+      it carries the rolls, the era, the allowed races / classes and the world seed, so everyone sees the same thing.
+      In game, player 1 types <code>.coop create</code> and the others <code>.coop join</code> with the 6 letter code it
+      gives, so you all start in the same place.</p>
+    <div class="controls">
+      <label class="field"><span>Party size</span>
+        <input type="number" id="party-size" min="1" max="40" value="5" style="width:90px">
+      </label>
+      <label class="field"><span>Classes</span>
+        <select id="party-unique">
+          <option value="1">No duplicate classes</option>
+          <option value="0">Duplicates allowed</option>
+        </select>
+      </label>
+      <button id="party-roll">Roll party</button>
+    </div>
+    <div id="party" style="margin-top:12px"></div>
+    <div class="controls" style="margin-top:12px">
+      <label class="field" style="flex:1;min-width:260px"><span>Share code</span>
+        <input type="text" id="party-code" readonly placeholder="Roll a party first">
+      </label>
+      <button class="quiet" id="party-copy">Copy</button>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <label class="field" style="flex:1;min-width:260px"><span>A friend's code</span>
+        <input type="text" id="party-load-code" placeholder="Paste the code here">
+      </label>
+      <button class="quiet" id="party-load">Load</button>
+    </div>
+    <p id="party-msg" class="muted" style="margin:8px 0 0"></p>
+  </section>
+
+  <section class="panel">
     <h2>Where you start</h2>
     <div id="start" class="muted"></div>
   </section>
@@ -345,7 +379,9 @@
     var brackets = R.parseBrackets(settings.brackets || '');
     if (!brackets.length) brackets = [{ min: 1, max: 80 }];
     var zones = R.shuffleZones(window.RANDOMIZER_ZONES || [], {
-      seed: settings.seed >>> 0, brackets: brackets, scope: settings.scope || 0, balanced: !!settings.balanced
+      seed: settings.seed >>> 0, brackets: brackets, scope: settings.scope || 0, balanced: !!settings.balanced,
+      adjacent: settings.adjacent === undefined ? true : !!settings.adjacent,
+      factionStarts: settings.factionStarts === undefined ? true : !!settings.factionStarts
     });
 
     var lowest = 0;
@@ -378,6 +414,153 @@
     allowed = defaultAllowed();
     saveAllowed(); renderAllowed(); refreshChoices();
   });
+
+  // ---- Co-op party ----
+  var PARTY_KEY = 'wr-party';
+
+  function rollParty(size, unique) {
+    var era = els.era.value;
+    var factions = ['alliance', 'horde'].filter(function (f) {
+      return allowed.factions[f] && (els.faction.value === 'random' || els.faction.value === f);
+    });
+    if (!factions.length) return { error: 'No allowed faction.' };
+    var faction = pick(factions);
+
+    var members = [];
+    var usedClasses = {};
+    for (var i = 0; i < size; i++) {
+      var pairs = [];
+      races(era, faction).forEach(function (raceId) {
+        classes(era, raceId).forEach(function (classId) {
+          if (!unique || !usedClasses[classId]) pairs.push([raceId, classId]);
+        });
+      });
+      if (!pairs.length) {
+        return { error: unique ? 'Not enough allowed classes for ' + size + ' players without duplicates.' :
+          'No allowed race and class go together.' };
+      }
+      var pair = pick(pairs);
+      usedClasses[pair[1]] = true;
+      var member = { race: pair[0], cls: pair[1], gender: pick(['m', 'f']), spec: '', profs: [] };
+      if (els.spec.value === 'random') member.spec = pick(CLASSES[pair[1]].specs);
+      if (els.profs.value === 'random') {
+        var pool = PROFESSIONS.filter(function (p) { return inEra(p, era); }).map(function (p) { return p.name; });
+        var first = pick(pool);
+        member.profs = [first, pick(pool.filter(function (p) { return p !== first; }))];
+      }
+      members.push(member);
+    }
+    return { era: era, faction: faction, members: members };
+  }
+
+  function encodeParty(party) {
+    var map = {};
+    try { map = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { map = {}; }
+    // Compact: masks for the allowed lists, indexes for specs and professions
+    function mask(group) {
+      return Object.keys(allowed[group]).reduce(function (bits, id) {
+        return allowed[group][id] ? bits | (1 << Number(id)) : bits;
+      }, 0);
+    }
+    var profNames = PROFESSIONS.map(function (p) { return p.name; });
+    var data = {
+      v: 2, e: ['vanilla', 'tbc', 'wrath'].indexOf(party.era), f: party.faction === 'alliance' ? 0 : 1,
+      a: [(allowed.factions.alliance ? 1 : 0) | (allowed.factions.horde ? 2 : 0), mask('races'), mask('classes')],
+      w: [map.seed || 0, map.brackets || '', map.scope || 0, map.balanced ? 1 : 0,
+        map.adjacent === 0 ? 0 : 1, map.factionStarts === 0 ? 0 : 1],
+      m: party.members.map(function (m) {
+        return [m.race, m.cls, m.gender === 'm' ? 0 : 1, CLASSES[m.cls].specs.indexOf(m.spec)]
+          .concat(m.profs.map(function (name) { return profNames.indexOf(name); }));
+      })
+    };
+    var json = JSON.stringify(data);
+    return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function decodeParty(code) {
+    var base64 = code.trim().replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
+    var data = JSON.parse(decodeURIComponent(escape(atob(base64))));
+    if (data.v !== 2 || !Array.isArray(data.m)) throw new Error('not a party code');
+    var profNames = PROFESSIONS.map(function (p) { return p.name; });
+    var result = { era: ['vanilla', 'tbc', 'wrath'][data.e] || 'wrath', faction: data.f ? 'horde' : 'alliance' };
+    result.allowed = { factions: { alliance: !!(data.a[0] & 1), horde: !!(data.a[0] & 2) }, races: {}, classes: {} };
+    Object.keys(RACES).forEach(function (id) { result.allowed.races[id] = !!(data.a[1] & (1 << Number(id))); });
+    Object.keys(CLASSES).forEach(function (id) { result.allowed.classes[id] = !!(data.a[2] & (1 << Number(id))); });
+    result.world = { seed: data.w[0], brackets: data.w[1], scope: data.w[2], balanced: data.w[3], adjacent: data.w[4],
+      factionStarts: data.w[5] };
+    result.members = data.m.map(function (m) {
+      return { race: m[0], cls: m[1], gender: m[2] ? 'f' : 'm', spec: m[3] >= 0 ? CLASSES[m[1]].specs[m[3]] : '',
+        profs: m.slice(4).map(function (i) { return profNames[i]; }) };
+    });
+    return result;
+  }
+
+  function showParty(party) {
+    var box = document.getElementById('party');
+    if (!party) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="cards">' + party.members.map(function (m, i) {
+      var race = RACES[m.race];
+      var cls = CLASSES[m.cls];
+      return '<div class="card"><div class="label">Player ' + (i + 1) + (i === 0 ? ' &middot; .coop create' : '') +
+        '</div><div style="display:flex;justify-content:center;gap:8px">' +
+        '<img src="img/race/' + m.race + m.gender + '.webp" alt="" style="width:56px;height:56px;margin:10px 0">' +
+        '<img src="img/class/' + m.cls + '.webp" alt="" style="width:56px;height:56px;margin:10px 0"></div>' +
+        '<div class="value">' + race.name + ' ' + cls.name + '</div>' +
+        '<div class="sub">' + (m.spec || 'spec not rolled') + (m.profs.length ? ' &middot; ' + m.profs.join(' &amp; ') : '') +
+        '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  var partyMsg = document.getElementById('party-msg');
+  var partyCode = document.getElementById('party-code');
+
+  document.getElementById('party-roll').addEventListener('click', function () {
+    var size = Math.max(1, Math.min(40, Math.floor(Number(document.getElementById('party-size').value) || 5)));
+    var party = rollParty(size, document.getElementById('party-unique').value === '1');
+    if (party.error) { partyMsg.textContent = party.error; return; }
+    partyMsg.textContent = '';
+    partyCode.value = encodeParty(party);
+    try { localStorage.setItem(PARTY_KEY, JSON.stringify(party)); } catch (e) { /* storage blocked */ }
+    showParty(party);
+  });
+
+  document.getElementById('party-copy').addEventListener('click', function () {
+    if (!partyCode.value || !navigator.clipboard) return;
+    navigator.clipboard.writeText(partyCode.value).then(function () { partyMsg.textContent = 'Copied.'; });
+  });
+
+  document.getElementById('party-load').addEventListener('click', function () {
+    var code = document.getElementById('party-load-code').value;
+    try {
+      var data = decodeParty(code);
+      allowed = data.allowed;
+      saveAllowed();
+      if (data.world.seed) {
+        var map = {};
+        try { map = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { map = {}; }
+        Object.keys(data.world).forEach(function (key) { map[key] = data.world[key]; });
+        try { localStorage.setItem('wr-map', JSON.stringify(map)); } catch (e) { /* storage blocked */ }
+      }
+      els.era.value = data.era;
+      var party = { era: data.era, faction: data.faction, members: data.members };
+      try { localStorage.setItem(PARTY_KEY, JSON.stringify(party)); } catch (e) { /* storage blocked */ }
+      partyCode.value = code.trim();
+      renderAllowed();
+      refreshChoices();
+      showParty(party);
+      partyMsg.textContent = 'Loaded: ' + party.members.length + ' players, world seed ' +
+        (data.world.seed || 'not set') + '.';
+      if (party.members.length) showStart({ race: party.members[0].race, cls: party.members[0].cls });
+    } catch (e) {
+      partyMsg.textContent = 'That is not a party code.';
+    }
+  });
+
+  try {
+    var savedParty = JSON.parse(localStorage.getItem(PARTY_KEY) || 'null');
+    if (savedParty) { showParty(savedParty); partyCode.value = encodeParty(savedParty); }
+  } catch (e) { /* storage blocked */ }
 
   renderAllowed();
   refreshChoices();

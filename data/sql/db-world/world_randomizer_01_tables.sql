@@ -53,3 +53,11 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_zone_link` (
     `neighbour_id` INT UNSIGNED NOT NULL,
     PRIMARY KEY (`zone_id`, `neighbour_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: zones that border each other (Randomizer.Brackets.Adjacent)';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_dungeon_bracket` (
+    `map_id` INT UNSIGNED NOT NULL COMMENT 'Instance map',
+    `zone_id` INT UNSIGNED NOT NULL COMMENT 'Entrance zone',
+    `level_min` TINYINT UNSIGNED NOT NULL,
+    `level_max` TINYINT UNSIGNED NOT NULL,
+    PRIMARY KEY (`map_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: written at startup, read by mod-dynamic-scaling (collective)';

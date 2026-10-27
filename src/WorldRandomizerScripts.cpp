@@ -41,7 +41,7 @@ public:
         if (!map || creature->GetCharmerOrOwnerGUID().IsPlayer() || creature->IsPet() || creature->IsTotem())
             return;
 
-        sWorldRandomizer->AdjustLevel(map->GetId(), creature->GetSpawnId(), map->IsDungeon(), level);
+        sWorldRandomizer->AdjustLevel(map, creature->GetSpawnId(), level);
     }
 };
 
@@ -79,9 +79,24 @@ public:
     void OnPlayerLogin(Player* player) override
     {
         RandomizerConfig const& config = sWorldRandomizer->Config();
+        if (!config.moduleEnable || !config.announce)
+            return;
+
+        static char const* const ERA_NAMES[] = { "", "Vanilla", "TBC", "Wrath" };
+        static char const* const HARDCORE_NAMES[] = { "", "you choose (.hardcore)", "every new character" };
+
+        ChatHandler handler(player->GetSession());
+        handler.SendSysMessage("This server is running the |cffFF8000World Randomizer|r module.");
         if (config.enable)
-            ChatHandler(player->GetSession()).PSendSysMessage("This server runs the |cffFF8000World Randomizer|r "
-                "(seed {}). Type .randomizer info to see where you are.", sWorldRandomizer->GetSeed());
+            handler.PSendSysMessage("  World shuffle: |cff4CFF00on|r, seed {}. .randomizer info shows your zone.",
+                sWorldRandomizer->GetSeed());
+        if (config.era != StatEra::Unchanged)
+            handler.PSendSysMessage("  Player stats: {}, XP x{:.2f}", ERA_NAMES[uint8(config.era)],
+                sWorldRandomizer->GetXPRate());
+        if (config.hardcoreMode)
+            handler.PSendSysMessage("  Hardcore: |cffFF2020{}|r", HARDCORE_NAMES[config.hardcoreMode]);
+        if (config.coopEnable)
+            handler.PSendSysMessage("  Co-op starts: up to {} players (.coop)", config.coopMaxSize);
     }
 
     void OnPlayerGiveXP(Player* /*player*/, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override

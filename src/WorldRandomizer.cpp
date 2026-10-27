@@ -11,6 +11,7 @@
 #include "DBCStores.h"
 #include "GameGraveyard.h"
 #include "Log.h"
+#include "Map.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -179,7 +180,9 @@ void WorldRandomizerMgr::LoadConfig()
 {
     RandomizerConfig c;
 
-    c.enable = sConfigMgr->GetOption<bool>("Randomizer.Enable", false);
+    c.moduleEnable = sConfigMgr->GetOption<bool>("Randomizer.Enable", true);
+    c.announce = sConfigMgr->GetOption<bool>("Randomizer.Announce", true);
+    c.enable = sConfigMgr->GetOption<bool>("Randomizer.World.Enable", false);
     c.seed = sConfigMgr->GetOption<uint32>("Randomizer.Seed", 0);
     c.brackets = ParseBrackets(sConfigMgr->GetOption<std::string>("Randomizer.Brackets",
         "1-10,11-20,21-30,31-40,41-50,51-60,61-70,71-80"));
@@ -200,6 +203,7 @@ void WorldRandomizerMgr::LoadConfig()
     c.scope = scope <= uint32(ShuffleScope::Expansion) ? ShuffleScope(scope) : ShuffleScope::Global;
     c.balanced = sConfigMgr->GetOption<bool>("Randomizer.Brackets.Balanced", false);
     c.adjacent = sConfigMgr->GetOption<bool>("Randomizer.Brackets.Adjacent", true);
+    c.factionStarts = sConfigMgr->GetOption<bool>("Randomizer.Brackets.FactionStarts", true);
 
     c.replaceCreatures = sConfigMgr->GetOption<bool>("Randomizer.Creatures.Replace", true);
     c.sameEntrySameReplacement = sConfigMgr->GetOption<bool>("Randomizer.Creatures.SameEntrySameReplacement", true);
@@ -213,11 +217,24 @@ void WorldRandomizerMgr::LoadConfig()
         if (Optional<uint32> entry = Acore::StringTo<uint32>(token))
             c.excludeEntries.push_back(*entry);
 
-    c.dungeonShift = sConfigMgr->GetOption<bool>("Randomizer.Dungeons.ShiftLevels", true);
+    c.dungeonMode = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Dungeons.Mode", 2));
+
+    // The other module's settings live in the same config manager; quiet lookups, since it may not be installed
+    c.collectiveSetting = sConfigMgr->GetOption<bool>("Randomizer.Collective.DynamicScaling", true);
+    c.collective = c.collectiveSetting && c.moduleEnable && c.enable &&
+        sConfigMgr->GetOption<bool>("DynamicScaling.Enable", false, false) &&
+        sConfigMgr->GetOption<bool>("DynamicScaling.Instance.Enable", true, false) &&
+        sConfigMgr->GetOption<bool>("DynamicScaling.Collective.WorldRandomizer", false, false);
 
     c.playerStart = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.Enable", true);
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
     c.playerStartFactionLock = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.FactionLock", true);
+
+    c.coopEnable = sConfigMgr->GetOption<bool>("Randomizer.Coop.Enable", true);
+    c.coopMaxSize = std::max<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Coop.MaxSize", 5));
+    c.coopMaxLevel = sConfigMgr->GetOption<uint8>("Randomizer.Coop.MaxLevel", 1);
+    c.coopSameFaction = sConfigMgr->GetOption<bool>("Randomizer.Coop.SameFaction", true);
+    c.coopAutoGroup = sConfigMgr->GetOption<bool>("Randomizer.Coop.AutoGroup", true);
 
     c.hardcoreMode = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.Mode", 0));
     c.hardcoreOnDeath = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.OnDeath", 2));
@@ -232,6 +249,15 @@ void WorldRandomizerMgr::LoadConfig()
     c.xpRateVanilla = sConfigMgr->GetOption<float>("Randomizer.Stats.XPRate.Vanilla", 1.0f);
     c.xpRateTBC = sConfigMgr->GetOption<float>("Randomizer.Stats.XPRate.TBC", 0.75f);
     c.xpRateWrath = sConfigMgr->GetOption<float>("Randomizer.Stats.XPRate.Wrath", 0.5f);
+
+    // The master switch turns every feature off
+    if (!c.moduleEnable)
+    {
+        c.enable = false;
+        c.hardcoreMode = 0;
+        c.era = StatEra::Unchanged;
+        c.coopEnable = false;
+    }
 
     _config = c;
 }
@@ -261,7 +287,10 @@ void WorldRandomizerMgr::StoreSeed(uint32 seed) const
 void WorldRandomizerMgr::Initialize()
 {
     if (!_config.enable)
+    {
+        PublishDungeonBrackets(); // clears what an earlier run left
         return;
+    }
 
     _seed = ResolveSeed();
     LoadZones();
@@ -270,15 +299,19 @@ void WorldRandomizerMgr::Initialize()
     if (_config.replaceCreatures || _config.shiftKeptLevels)
         ReplaceCreatures();
 
-    if (_config.dungeonShift)
+    if (_config.dungeonMode || _config.collective)
         ComputeDungeonShifts();
+
+    PublishDungeonBrackets();
 
     if (_config.playerStart)
         LoadStartLocations();
 
     LOG_INFO("module", "mod-world-randomizer: seed {}, {} zones in {} brackets, {} creatures replaced, {} kept and "
-        "level shifted, {} dungeons shifted, {} start points.", _seed, _zones.size(), _config.brackets.size(),
-        _replaced, _spawnZone.size(), _dungeonShift.size(), _startLocations.size());
+        "level shifted, {} dungeons {}, {} start points.", _seed, _zones.size(), _config.brackets.size(),
+        _replaced, _spawnZone.size(), _config.collective ? _dungeonZone.size() : _dungeonShift.size(),
+        _config.collective ? "handed to mod-dynamic-scaling" :
+            (_config.dungeonMode == 2 ? "scaling inside their bracket" : "shifted"), _startLocations.size());
 }
 
 void WorldRandomizerMgr::LoadZones()
@@ -407,6 +440,52 @@ void WorldRandomizerMgr::Shuffle()
             std::size_t chosen = candidates[rng.Below(uint32(candidates.size()))];
             assigned[chosen] = true;
             _zones[chosen].bracket = pool[k];
+        }
+    }
+
+    if (_config.factionStarts)
+        EnsureFactionStarts();
+}
+
+uint32 WorldRandomizerMgr::GroupKey(RandomizerZone const& zone) const
+{
+    if (_config.scope == ShuffleScope::Continent)
+        return zone.continent;
+    if (_config.scope == ShuffleScope::Expansion)
+        return zone.expansion;
+    return 0;
+}
+
+void WorldRandomizerMgr::EnsureFactionStarts()
+{
+    // Keep this in step with ensureFactionStarts() in web/randomizer.js. No random numbers: it only swaps.
+    // Brackets are sorted, so bracket 0 is the lowest (where new characters start).
+    for (uint8 team = 0; team < 2; ++team)
+    {
+        bool present = std::any_of(_zones.begin(), _zones.end(), [team](RandomizerZone const& zone)
+        {
+            return zone.bracket == 0 && zone.territory == team;
+        });
+        if (present)
+            continue;
+
+        // The faction's own zone in the lowest bracket (lowest id on a tie)...
+        RandomizerZone* own = nullptr;
+        for (RandomizerZone& zone : _zones)
+            if (zone.shuffle && zone.territory == team && (!own || zone.bracket < own->bracket))
+                own = &zone;
+
+        if (!own)
+            continue;
+
+        // ...swaps brackets with the first contested bracket 0 zone of the same shuffle group
+        for (RandomizerZone& zone : _zones)
+        {
+            if (zone.shuffle && zone.bracket == 0 && zone.territory == 2 && GroupKey(zone) == GroupKey(*own))
+            {
+                std::swap(zone.bracket, own->bracket);
+                break;
+            }
         }
     }
 }
@@ -613,6 +692,17 @@ void WorldRandomizerMgr::ReplaceCreatures()
 void WorldRandomizerMgr::ComputeDungeonShifts()
 {
     _dungeonShift.clear();
+    _dungeonZone.clear();
+    _dungeonBase.clear();
+
+    // The level each dungeon was made for: its LFG recommended level
+    for (uint32 i = 0; i < sLFGDungeonStore.GetNumRows(); ++i)
+        if (LFGDungeonEntry const* entry = sLFGDungeonStore.LookupEntry(i))
+        {
+            uint32 level = entry->TargetLevel ? entry->TargetLevel : (entry->MinLevel + entry->MaxLevel) / 2;
+            if (level && !_dungeonBase.count(entry->MapID))
+                _dungeonBase[entry->MapID] = uint8(level);
+        }
 
     std::unordered_map<uint32, uint32> entranceZones;
     if (QueryResult result = WorldDatabase.Query("SELECT `map_id`, `zone_id` FROM `world_randomizer_instance`"))
@@ -645,7 +735,11 @@ void WorldRandomizerMgr::ComputeDungeonShifts()
     for (auto const& [mapId, zoneId] : entranceZones)
     {
         RandomizerZone const* zone = FindZone(zoneId);
-        if (!zone || zone->bracket == zone->homeBracket)
+        if (!zone)
+            continue;
+
+        _dungeonZone[mapId] = zoneId;
+        if (zone->bracket == zone->homeBracket)
             continue;
 
         Bracket const& from = _config.brackets[zone->homeBracket];
@@ -656,18 +750,59 @@ void WorldRandomizerMgr::ComputeDungeonShifts()
     }
 }
 
-bool WorldRandomizerMgr::AdjustLevel(uint32 mapId, ObjectGuid::LowType spawnId, bool isDungeon, uint8& level) const
+Bracket const* WorldRandomizerMgr::GetDungeonBracket(uint32 mapId) const
 {
-    if (!_config.enable)
+    auto itr = _dungeonZone.find(mapId);
+    if (itr == _dungeonZone.end())
+        return nullptr;
+
+    RandomizerZone const* zone = FindZone(itr->second);
+    return zone ? &_config.brackets[zone->bracket] : nullptr;
+}
+
+bool WorldRandomizerMgr::AdjustLevel(Map* map, ObjectGuid::LowType spawnId, uint8& level) const
+{
+    if (!_config.enable || !map)
         return false;
 
-    if (isDungeon)
+    if (map->IsDungeon())
     {
-        auto itr = _dungeonShift.find(mapId);
-        if (itr == _dungeonShift.end())
+        // Collective: mod-dynamic-scaling scales dungeons inside their bracket instead
+        if (_config.collective || !_config.dungeonMode)
             return false;
 
-        level = uint8(std::clamp<int32>(int32(level) + itr->second, 1, MAX_LEVEL));
+        if (_config.dungeonMode == 1)
+        {
+            auto itr = _dungeonShift.find(map->GetId());
+            if (itr == _dungeonShift.end())
+                return false;
+
+            level = uint8(std::clamp<int32>(int32(level) + itr->second, 1, MAX_LEVEL));
+            return true;
+        }
+
+        // Mode 2: scale to the group, inside the entrance zone's bracket. Every creature moves by the same amount,
+        // so bosses stay above their trash.
+        Bracket const* bracket = GetDungeonBracket(map->GetId());
+        if (!bracket)
+            return false;
+
+        auto baseItr = _dungeonBase.find(map->GetId());
+        int32 base = baseItr != _dungeonBase.end() ? baseItr->second : level;
+
+        int32 reference = 0;
+        for (auto const& ref : map->GetPlayers())
+            if (Player* player = ref.GetSource())
+                if (!player->IsGameMaster())
+                    reference = std::max<int32>(reference, player->GetLevel());
+
+        if (!reference) // nobody inside yet: the middle of the bracket
+            reference = (int32(bracket->levelMin) + int32(bracket->levelMax)) / 2;
+
+        int32 aboveBase = std::max<int32>(0, int32(level) - base);
+        int32 target = int32(level) + reference - base;
+        target = std::clamp<int32>(target, int32(bracket->levelMin) + aboveBase, int32(bracket->levelMax) + aboveBase);
+        level = uint8(std::clamp<int32>(target, 1, MAX_LEVEL));
         return true;
     }
 
@@ -682,6 +817,27 @@ bool WorldRandomizerMgr::AdjustLevel(uint32 mapId, ObjectGuid::LowType spawnId, 
     Bracket const& to = _config.brackets[zone.bracket];
     level = RemapLevel(level, zone.levelMin, zone.levelMax, to.levelMin, to.levelMax);
     return true;
+}
+
+void WorldRandomizerMgr::PublishDungeonBrackets()
+{
+    // Read by mod-dynamic-scaling at OnStartup. Synchronous, so it is there before that runs.
+    WorldDatabase.DirectExecute("DELETE FROM `world_randomizer_dungeon_bracket`");
+    if (!_config.collective || _dungeonZone.empty())
+        return;
+
+    std::string values;
+    for (auto const& [mapId, zoneId] : _dungeonZone)
+    {
+        RandomizerZone const* zone = FindZone(zoneId);
+        Bracket const& bracket = _config.brackets[zone->bracket];
+        if (!values.empty())
+            values += ',';
+        values += Acore::StringFormat("({},{},{},{})", mapId, zoneId, bracket.levelMin, bracket.levelMax);
+    }
+
+    WorldDatabase.DirectExecute("INSERT INTO `world_randomizer_dungeon_bracket` (`map_id`, `zone_id`, `level_min`, "
+        "`level_max`) VALUES " + values);
 }
 
 void WorldRandomizerMgr::LoadStartLocations()

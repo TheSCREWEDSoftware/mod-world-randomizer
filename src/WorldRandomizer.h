@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
+class Map;
 class Player;
 
 // Mulberry32. The web map (web/randomizer.js) uses the same generator, so a seed gives the same shuffle there.
@@ -89,12 +90,15 @@ struct RandomizerZone
 
 struct RandomizerConfig
 {
-    bool enable = false;
+    bool moduleEnable = true; // Randomizer.Enable: master switch for every feature below
+    bool announce = true;     // Randomizer.Announce: login message
+    bool enable = false;      // Randomizer.World.Enable: the world shuffle
     uint32 seed = 0;
     std::vector<Bracket> brackets;
     ShuffleScope scope = ShuffleScope::Global;
     bool balanced = false;
     bool adjacent = true; // neighbouring zones get neighbouring brackets
+    bool factionStarts = true; // each faction gets one of its own zones in bracket 1
 
     bool replaceCreatures = true;
     bool sameEntrySameReplacement = true;
@@ -105,11 +109,24 @@ struct RandomizerConfig
     bool computeMissingZones = true;
     std::vector<uint32> excludeEntries;
 
-    bool dungeonShift = true;
+    uint8 dungeonMode = 2; // 0 unchanged, 1 shift by as much as the entrance zone moved, 2 scale to the group
+                           // inside the entrance zone's bracket
+
+    // Collective with mod-dynamic-scaling: it scales dungeons (Simple) inside their bracket, so this module
+    // publishes the brackets and stops shifting dungeon levels itself. Needs both modules' collective switches on.
+    bool collectiveSetting = true;
+    bool collective = false;
 
     bool playerStart = true;
     bool playerStartSkipDK = true;
     bool playerStartFactionLock = true;
+
+    // Co-op: friends share a code and start together
+    bool coopEnable = true;
+    uint8 coopMaxSize = 5;
+    uint8 coopMaxLevel = 1;
+    bool coopSameFaction = true;
+    bool coopAutoGroup = true;
 
     // Hardcore: one life. A dead hardcore character is never deleted for good (see WorldRandomizerHardcore.cpp)
     uint8 hardcoreMode = 0;      // 0 off, 1 players opt in with .hardcore on, 2 every new character
@@ -153,7 +170,8 @@ public:
     std::size_t ShiftedCount() const { return _spawnZone.size(); }
 
     // Level hooks
-    bool AdjustLevel(uint32 mapId, ObjectGuid::LowType spawnId, bool isDungeon, uint8& level) const;
+    bool AdjustLevel(Map* map, ObjectGuid::LowType spawnId, uint8& level) const;
+    Bracket const* GetDungeonBracket(uint32 mapId) const;
 
     // Players
     bool PickStartLocation(Player* player, StartLocation& out) const;
@@ -168,9 +186,12 @@ public:
 private:
     void LoadZones();
     void Shuffle();
+    void EnsureFactionStarts();
+    uint32 GroupKey(RandomizerZone const& zone) const;
     void LoadSpawnZones(std::unordered_map<ObjectGuid::LowType, uint32>& out);
     void ReplaceCreatures();
     void ComputeDungeonShifts();
+    void PublishDungeonBrackets();
     void LoadStartLocations();
     uint32 ResolveSeed();
 
@@ -181,6 +202,8 @@ private:
 
     std::unordered_map<ObjectGuid::LowType, uint16> _spawnZone; // kept spawn -> zone index, for level remap
     std::unordered_map<uint32, int32> _dungeonShift;            // map -> level delta
+    std::unordered_map<uint32, uint32> _dungeonZone;            // map -> entrance zone
+    std::unordered_map<uint32, uint8> _dungeonBase;             // map -> level the dungeon was made for
     std::vector<StartLocation> _startLocations;
     std::size_t _replaced = 0;
 

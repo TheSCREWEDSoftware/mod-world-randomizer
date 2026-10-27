@@ -40,3 +40,26 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_hardcore_revive` (
     PRIMARY KEY (`id`),
     KEY `idx_guid` (`guid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: hardcore restores (bugged deaths)';
+
+-- Co-op: parties made with .coop create, and who joined them.
+CREATE TABLE IF NOT EXISTS `world_randomizer_coop` (
+    `code` CHAR(6) NOT NULL,
+    `leader` INT UNSIGNED NOT NULL COMMENT 'characters.guid',
+    `map` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Where the party starts',
+    `zone` INT UNSIGNED NOT NULL DEFAULT 0,
+    `x` FLOAT NOT NULL DEFAULT 0,
+    `y` FLOAT NOT NULL DEFAULT 0,
+    `z` FLOAT NOT NULL DEFAULT 0,
+    `o` FLOAT NOT NULL DEFAULT 0,
+    `team` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 Alliance, 1 Horde',
+    `created_at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
+    PRIMARY KEY (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: co-op parties';
+
+CREATE TABLE IF NOT EXISTS `world_randomizer_coop_member` (
+    `guid` INT UNSIGNED NOT NULL COMMENT 'characters.guid',
+    `code` CHAR(6) NOT NULL,
+    `joined_at` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Unix time',
+    PRIMARY KEY (`guid`),
+    KEY `idx_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='mod-world-randomizer: co-op party members';

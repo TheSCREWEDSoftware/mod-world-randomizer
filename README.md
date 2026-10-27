@@ -11,7 +11,10 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   by level and split into land / water and normal / elite. All spawns of one creature in a zone become the
   same random creature, so packs stay packs.
 - **Kept creatures** (quest kill targets, spawns with their own scripts) move their level into the new bracket.
-- **Dungeons** move every creature's level by as much as their entrance zone's bracket moved.
+- **Dungeons** follow the bracket their entrance zone landed in. By default (`Randomizer.Dungeons.Mode = 2`) their
+  creatures scale to the group's level but stay inside that bracket: Ragefire Chasm in a 31-40 bracket scales
+  between 31 and 40, bosses still above their trash. This works on its own; with mod-dynamic-scaling installed and
+  the collective on, that module does it instead and adds its Simple mode buff.
 - **New characters** start at a graveyard in a bracket 1 zone of their own faction (then contested zones), with
   the hearthstone set there. Death Knights keep Ebon Hold.
 - **Player stats era**: base stats per level from Wrath (AzerothCore), TBC (cMaNGOS-TBC) or Vanilla
@@ -22,15 +25,32 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   (or locked, or left a ghost), and `world_randomizer_hardcore` keeps it with its owner account, level, killer and
   date. A bugged death is undone with `.hardcore restore <name or GUID> [reason]`.
 
-Nothing is written to `creature`: the swaps happen in memory at startup. `Randomizer.Enable = 0` and a
-restart bring the normal world back. The seed is kept in the characters DB, so the world stays the same
+- **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
+  `.coop join <code>` and start in the same place, in the leader's group.
+
+Every feature has its own switch; `Randomizer.Enable` is the master switch and `Randomizer.Announce` the login
+message. Nothing is written to `creature`: the swaps happen in memory at startup. `Randomizer.World.Enable = 0`
+and a restart bring the normal world back.
+
+## How new characters start
+
+1. A character is created as usual, at its race's normal start.
+2. On its very first login the module picks a random graveyard in a bracket 1 zone: first zones of the
+   character's own faction, then contested zones (only graveyards that faction may use), teleports the character
+   there and sets the hearthstone there. Death Knights keep Ebon Hold.
+3. `Randomizer.Brackets.FactionStarts` (on by default) makes sure each faction has one of its own zones in bracket 1,
+   so players don't all land in contested zones (without it both factions get one in about 1 seed out of 8).
+4. Playing together: one player types `.coop create` right away (level 1) and shares the code; the others type
+   `.coop join <code>` and are moved to the leader's start, hearthstone included. The seed is kept in the characters DB, so the world stays the same
 across restarts until you reroll it.
 
 ## Web pages (`web/`)
 
 Plain HTML + JavaScript, no build step.
 
-- `index.html`: character roller. Era, faction, race, class, spec, two professions; tick which factions, races and
+- `index.html`: character roller. A co-op panel rolls a whole party (party size, no duplicate classes) and gives
+  a share code carrying the rolls, era, allowed lists and world seed; friends paste it to see the same party.
+  The rest: Era, faction, race, class, spec, two professions; tick which factions, races and
   classes may be rolled (Death Knights are off by default, they start at 55); hardcore mode locks the first roll. It also tells you which bracket 1 zones you can start in with the seed from the map page.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
@@ -52,7 +72,9 @@ World DB:
   range, continent, expansion, territory. `enabled = 0` drops a zone; `shuffle = 0` keeps it in its own bracket.
 - `world_randomizer_zone_link`: which zones border each other, worked out from the aowow outlines (plus a few
   borders across water and boat links), for `Randomizer.Brackets.Adjacent`.
-- `world_randomizer_instance`: optional entrance zone per instance, if the area trigger lookup gets one wrong.
+- `world_randomizer_instance`: entrance zone per instance where the area trigger lookup can't find one (city
+  entrances: Ragefire Chasm, the Stockade, the Violet Hold).
+- `world_randomizer_dungeon_bracket`: written at startup for mod-dynamic-scaling (collective).
 - `world_randomizer_spawn_zone`: cache. Most `creature` rows have `zoneId = 0`; the first start works their
   zones out from the terrain (slow once) and keeps them here.
 - `world_randomizer_levelstats` / `world_randomizer_classlevelstats`: era 1 Vanilla (vMaNGOS world database
@@ -63,6 +85,7 @@ Characters DB:
 - `world_randomizer_state`: the world seed.
 - `world_randomizer_hardcore`: every hardcore character, owner account, status, level, killer, death date.
 - `world_randomizer_hardcore_revive`: every restore, with the GM and the reason.
+- `world_randomizer_coop` / `world_randomizer_coop_member`: co-op parties, their start point, and who joined.
 
 `tools/generate_from_aowow.py <aowow>/Stuff/zone-extract` rebuilds the zone SQL and `web/zones.js` after a new
 aowow setup.
@@ -75,6 +98,9 @@ aowow setup.
 | `.randomizer zones` | GM | Every zone and its bracket |
 | `.randomizer reroll [seed]` | admin | Store a new seed; the world changes after a restart |
 | `.randomizer start` | GM | Teleport to a bracket 1 start point for your faction |
+| `.coop` | players | Your co-op party and its code |
+| `.coop create` | players | Make a party and get its code (up to `Randomizer.Coop.MaxLevel`) |
+| `.coop join <code>` | players | Join a friend's party and start where they start |
 | `.hardcore` | players | Your hardcore status |
 | `.hardcore on confirm` | players | Go hardcore (Mode 1, up to `OptInMaxLevel`) |
 | `.hardcore fallen` | players | The last 10 hardcore deaths |
@@ -107,15 +133,24 @@ change. Races and classes an era didn't have are filled in: Blood Elf and Draene
 numbers plus AzerothCore's racial difference, and Death Knights use the Warrior's numbers. Past the era's level
 cap (60 / 70) stats keep AzerothCore's growth from there.
 
-## With mod-dynamic-scaling
+## With mod-dynamic-scaling (collective)
 
-Both modules pick creature levels in the same hook. If both run, turn off instance level scaling in
-mod-dynamic-scaling (`DynamicScaling.Instance.LevelScaling.Enable = 0`) and either drop the open world zone rows
-there or regenerate them from the shuffled brackets, or the two will pull levels in different directions.
+With both modules enabled and both collective switches on (`Randomizer.Collective.DynamicScaling` here,
+`DynamicScaling.Collective.WorldRandomizer` there, both on by default), each reads the other's settings from the
+config and they split the work: this module writes every dungeon's bracket (from its entrance zone) to
+`world_randomizer_dungeon_bracket`, and mod-dynamic-scaling scales those dungeons in Simple mode inside that
+bracket (Ragefire Chasm in a 31-40 bracket scales between 31 and 40) and leaves the open world alone. Dungeons
+with a city entrance follow the zone around the city (`world_randomizer_instance`: Ragefire Chasm follows
+Durotar, the Stockade Elwynn Forest, the Violet Hold Crystalsong Forest).
+
+Turn either switch off and they ignore each other; then don't run both on the same creatures (turn off
+`DynamicScaling.Instance.LevelScaling.Enable` and the open world zone rows there).
 
 ## Known limits
 
 - Quests keep their own levels and rewards; only their kill targets move levels.
 - Replaced creatures keep the spawn's waypoints, mounts and auras from `creature_addon`.
 - Dungeon trash and bosses keep their entries (boss scripts depend on them); only their levels move.
+- Without mod-dynamic-scaling, dungeon levels are picked when creatures spawn, from the players inside at that
+  moment; someone joining later doesn't move creatures that are already up. The collective rescales them.
 - A seed shows the same world on the map page only while `world_randomizer_zone` matches `web/zones.js`.
