@@ -16,6 +16,11 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
 - **Player stats era**: base stats per level from Wrath (AzerothCore), TBC (cMaNGOS-TBC) or Vanilla
   (vMaNGOS), with an XP rate per era (Wrath x0.5, TBC x0.75, Vanilla x1 by default).
 
+- **Hardcore** (optional): one life, chosen by the player (`.hardcore on confirm`) or forced for every new
+  character. A dead hardcore character is never deleted for good: it is soft deleted with the core's own unlink
+  (or locked, or left a ghost), and `world_randomizer_hardcore` keeps it with its owner account, level, killer and
+  date. A bugged death is undone with `.hardcore restore <name or GUID> [reason]`.
+
 Nothing is written to `creature`: the swaps happen in memory at startup. `Randomizer.Enable = 0` and a
 restart bring the normal world back. The seed is kept in the characters DB, so the world stays the same
 across restarts until you reroll it.
@@ -52,6 +57,8 @@ World DB:
 Characters DB:
 
 - `world_randomizer_state`: the world seed.
+- `world_randomizer_hardcore`: every hardcore character, owner account, status, level, killer, death date.
+- `world_randomizer_hardcore_revive`: every restore, with the GM and the reason.
 
 `tools/generate_from_aowow.py <aowow>/Stuff/zone-extract` rebuilds the zone SQL and `web/zones.js` after a new
 aowow setup.
@@ -64,6 +71,28 @@ aowow setup.
 | `.randomizer zones` | GM | Every zone and its bracket |
 | `.randomizer reroll [seed]` | admin | Store a new seed; the world changes after a restart |
 | `.randomizer start` | GM | Teleport to a bracket 1 start point for your faction |
+| `.hardcore` | players | Your hardcore status |
+| `.hardcore on confirm` | players | Go hardcore (Mode 1, up to `OptInMaxLevel`) |
+| `.hardcore fallen` | players | The last 10 hardcore deaths |
+| `.hardcore restore <name or GUID> [reason]` | GM | Undo a death; lists the GUIDs when several dead characters share the name |
+
+### Hardcore restore
+
+```
+.hardcore restore Hardxammy
+Found multiple characters with this name:
+- Hardxammy / GUID 741158 / Account 54394 / Hardcore (soft deleted) / died on 2026-10-20 at level 25
+- Hardxammy / GUID 724665 / Account 54394 / Hardcore (soft deleted) / died on 2026-10-15 at level 32
+Run it again with the GUID: .hardcore restore <GUID> [reason]
+
+.hardcore restore 741158 died to a falling-through-the-world bug
+Restored: Hardxammy / GUID 741158 / Account 54394 / Hardcore (soft deleted) / died on 2026-10-20 at level 25
+```
+
+The character goes back on its owner account under its old name, comes back to life on its next login, and the
+restore is logged in `world_randomizer_hardcore_revive` (who, when, why). If the old name is taken by then, the
+command says so; restore it with `.character deleted restore <GUID> <new name>` and it still counts as a restore
+on its next login.
 
 ## About the stats eras
 

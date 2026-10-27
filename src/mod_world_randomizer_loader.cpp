@@ -5,9 +5,11 @@
 
 void AddWorldRandomizerScripts();
 void AddWorldRandomizerCommandScripts();
+void AddWorldRandomizerHardcoreScripts();
 
 void Addmod_world_randomizerScripts()
 {
     AddWorldRandomizerScripts();
     AddWorldRandomizerCommandScripts();
+    AddWorldRandomizerHardcoreScripts();
 }

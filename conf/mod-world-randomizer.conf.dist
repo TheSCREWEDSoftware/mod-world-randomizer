@@ -144,6 +144,63 @@ Randomizer.PlayerStart.FactionLock = 1
 Randomizer.PlayerStart.SkipDeathKnights = 1
 
 #
+#    Randomizer.Hardcore.Mode
+#        Description: One life. A hardcore character that dies is never deleted for good: it is kept in the
+#                     characters DB and listed in `world_randomizer_hardcore` with its owner account and how it
+#                     died. A GM can undo a bugged death with .hardcore restore <name or GUID> [reason].
+#                     Works with Randomizer.Enable = 0 too.
+#        Default:     0 - off
+#                     1 - players choose: .hardcore on confirm (only up to OptInMaxLevel, can't be undone)
+#                     2 - every new character is hardcore
+
+Randomizer.Hardcore.Mode = 0
+
+#
+#    Randomizer.Hardcore.OnDeath
+#        Description: What happens to a hardcore character that dies.
+#        Default:     2 - soft deleted: the core's own unlink (name and account move to deleteInfos_*,
+#                         everything else stays). .hardcore restore or .character deleted restore bring it back.
+#                     1 - locked: kicked now and on every login, stays on the account
+#                     0 - ghost forever: can log in and walk around, can't be resurrected
+
+Randomizer.Hardcore.OnDeath = 2
+
+#
+#    Randomizer.Hardcore.OptInMaxLevel
+#        Description: Highest level at which .hardcore on is still allowed (Mode 1).
+#        Default:     1
+
+Randomizer.Hardcore.OptInMaxLevel = 1
+
+#
+#    Randomizer.Hardcore.KickDelay
+#        Description: Seconds between the death and the kick (OnDeath 1 and 2), to see what happened.
+#        Default:     10
+
+Randomizer.Hardcore.KickDelay = 10
+
+#
+#    Randomizer.Hardcore.IgnoreBattlegrounds
+#        Description: Deaths in battlegrounds and arenas don't count.
+#        Default:     1
+
+Randomizer.Hardcore.IgnoreBattlegrounds = 1
+
+#
+#    Randomizer.Hardcore.CountPvPDeaths
+#        Description: Deaths to other players (outside battlegrounds) count.
+#        Default:     1
+
+Randomizer.Hardcore.CountPvPDeaths = 1
+
+#
+#    Randomizer.Hardcore.Announce
+#        Description: Tell the whole server when someone starts a hardcore run, falls, or is restored.
+#        Default:     1
+
+Randomizer.Hardcore.Announce = 1
+
+#
 #    Randomizer.Stats.Era
 #        Description: Player base stats (Str, Agi, Sta, Int, Spi, base health and mana) per level.
 #                     This works with Randomizer.Enable = 0 too.

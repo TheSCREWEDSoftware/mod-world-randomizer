@@ -205,6 +205,14 @@ void WorldRandomizerMgr::LoadConfig()
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
     c.playerStartFactionLock = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.FactionLock", true);
 
+    c.hardcoreMode = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.Mode", 0));
+    c.hardcoreOnDeath = std::min<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.OnDeath", 2));
+    c.hardcoreOptInMaxLevel = sConfigMgr->GetOption<uint8>("Randomizer.Hardcore.OptInMaxLevel", 1);
+    c.hardcoreKickDelay = sConfigMgr->GetOption<uint32>("Randomizer.Hardcore.KickDelay", 10);
+    c.hardcoreIgnoreBattlegrounds = sConfigMgr->GetOption<bool>("Randomizer.Hardcore.IgnoreBattlegrounds", true);
+    c.hardcoreCountPvP = sConfigMgr->GetOption<bool>("Randomizer.Hardcore.CountPvPDeaths", true);
+    c.hardcoreAnnounce = sConfigMgr->GetOption<bool>("Randomizer.Hardcore.Announce", true);
+
     uint32 era = sConfigMgr->GetOption<uint32>("Randomizer.Stats.Era", 0);
     c.era = era <= uint32(StatEra::Wrath) ? StatEra(era) : StatEra::Unchanged;
     c.xpRateVanilla = sConfigMgr->GetOption<float>("Randomizer.Stats.XPRate.Vanilla", 1.0f);
