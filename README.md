@@ -151,8 +151,8 @@ looted money %, health / mana regen %, skill rate (per skill or every profession
 any class, learn a spell (optionally once a profession is known), extra profession slots, start with a profession,
 unlock a starting profession choice (`.rach profession`), + starting skill, gathering yield multiplier, a spell at
 a level (the level 60 riding), and titles (the Explorer, Loremaster, the Seeker, the Patient). Type 0 is text
-only, for rewards that need features the module doesn't have yet (corrupted / treasure zones, enchanted drops,
-poisons for any class); the four achievements built on those are shipped disabled.
+only, for rewards that need features the module doesn't have yet (the treasure zone, enchanted drops,
+poisons for any class); the two treasure zone achievements are shipped disabled.
 
 "Usable by any class" gives the character the armor / weapon skill and proficiency on every login: the core
 deletes skills a race / class may not have (SkillRaceClassInfo.dbc) when it loads a character, so the module saves

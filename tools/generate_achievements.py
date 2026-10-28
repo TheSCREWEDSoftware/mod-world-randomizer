@@ -45,7 +45,7 @@ for i,l in enumerate(range(10,90,10)):
         if (l==70 and exp==VANILLA) or (l==80 and exp!=WRATH): continue
         base=100+i+1; xp=xp_for(50,exp)
         ach(base+VERSION_OFFSET[exp],1,'Levels',f'Reach level {l} on any character',LEVEL,l,0,
-            [(XP,xp,0,0,f'XP +{xp}%'),(NONE,0,0,0,'4 Zones Corrupted')],expansion=exp,parent=base)
+            [(XP,xp,0,0,f'XP +{xp}%')],expansion=exp,parent=base)
 # 2 Zone discovery
 for i,n in enumerate([10,20,30]):
     ach(201+i,2,'Zone Discovery',f'Discover {n} different zones',ZONES,n,0,[(CAP,1,0,0,'+1 Max Level Cap')])
@@ -67,8 +67,6 @@ for exp in (VANILLA,TBC,WRATH):
         else: rew=[(GDROP,50,0,0,'Enemies drop +50% gold')] if i==2 else [(GDROP,100,0,0,'Enemies drop x2 gold')]
         ach(401+i+VERSION_OFFSET[exp],4,'Gold Milestones',f'Get {n} gold in a single run',GOLD,n,0,rew,
             expansion=exp,parent=401+i)
-# 5 Feats (needs dungeon / corrupted zone tracking: listed, off)
-ach(501,5,'Feats','Complete a run without dying (all dungeons solo)',LEVEL,80,0,[(NONE,0,0,0,'Double Corrupted Zones + Special Drops')],enabled=0)
 # 6 HP
 HP_STEPS={VANILLA:[500,1000,2000,5000],TBC:[1000,2500,5000,10000],WRATH:[2000,5000,10000,25000]}
 for exp in (VANILLA,TBC,WRATH):
@@ -86,7 +84,6 @@ for i,n in enumerate([5,15,30,50,100]):
 ach(901,9,'Chaos Goals','Kill an enemy 5+ levels above you',HIGHER,5,0,[(BTAL,1,0,0,'+1 Talent Point')])
 ach(902,9,'Chaos Goals','Kill 50 enemies in the Treasure Zone',LEVEL,80,0,[(NONE,0,0,0,'Enemies drop +50% more green items')],enabled=0)
 ach(903,9,'Chaos Goals','Loot a blue item from the Treasure Zone',LEVEL,80,0,[(NONE,0,0,0,'Enemies drop +50% more blue items')],enabled=0)
-ach(904,9,'Chaos Goals','Kill 50 elite enemies in Corrupted Zones',LEVEL,80,0,[(NONE,0,0,0,'XP +50%')],enabled=0)
 # Weapon skills
 weapons=[('Axe',44),('Sword',43),('Mace',54),('Two-Handed Axe',172),('Two-Handed Sword',55),('Two-Handed Mace',160),('Bow',45),('Crossbow',226),('Polearm',229),('Fist',473),('Stave',136),('Unarmed',162),('Thrown',176),('Wand',228)]
 anyclass={'Axe':'Axes','Sword':'Swords','Mace':'Maces','Two-Handed Axe':'2H Axes','Two-Handed Sword':'2H Swords','Two-Handed Mace':'2H Maces','Bow':'Bows','Crossbow':'Crossbows','Polearm':'Polearms','Fist':'Fist weapons','Stave':'Staves','Thrown':'Thrown weapons','Wand':'Wands'}
@@ -165,7 +162,7 @@ ach(4899,21,'Professions 450','Reach skill 450 in all professions',CATEGORY,1,21
 def q(s): return "'"+str(s).replace("'","''")+"'"
 out=["-- mod-world-randomizer: achievements and their rewards (account-wide; see WorldRandomizerAchievements.h for",
 "-- the criteria / reward numbers). Rows with `enabled` = 0 need features the module doesn't have yet",
-"-- (corrupted / treasure zones, flawless dungeon runs); their rewards with type 0 are text only.",
+"-- (treasure zones, enchanted drops, poisons for any class); their rewards with type 0 are text only.",
 "DELETE FROM `world_randomizer_achievement` WHERE `id` BETWEEN 100 AND 5999;",
 "INSERT INTO `world_randomizer_achievement` (`id`, `category`, `category_name`, `name`, `description`, `icon`, `expansion`, `parent_id`, `criteria`, `value`, `arg`, `enabled`) VALUES",
 ",\n".join(f"({r[0]}, {r[1]}, {q(r[2])}, {q(r[3])}, {q(r[8])}, {q(r[9])}, {r[10]}, {r[11]}, {r[4]}, {r[5]}, {r[6]}, {r[7]})" for r in rows)+";",
