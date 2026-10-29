@@ -232,6 +232,7 @@
     var fresh = defaultState();
     state.party = Object.assign(fresh.party, state.party || {});
     state.players.forEach(function (p, i) { normalizePlayer(p, i + 1); });
+    state.players.forEach(function (p, i) { if (/^Player \d+$/.test(p.name)) p.name = 'Player ' + (i + 1); });
     if (ERAS.indexOf(state.era) < 0) state.era = 'wrath';
     if (!(state.tab < state.players.length)) state.tab = 0;
     return state;
@@ -241,6 +242,13 @@
 
   function save() {
     try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) { /* storage blocked */ }
+  }
+
+  // Players still called "Player N" follow their place in the party, so names never repeat; renamed ones keep theirs
+  function renumberPlayers() {
+    state.players.forEach(function (p, i) {
+      if (/^Player \d+$/.test(p.name)) p.name = 'Player ' + (i + 1);
+    });
   }
 
   function locked(p) {
@@ -591,7 +599,7 @@
     if (cat === 'faction') {
       var faction = RACES[roll.race].faction;
       if (state.players.length > 1 && state.party.faction === 'same') {
-        rerollPartyFaction(index, faction);
+        message('Same faction for everyone: the faction can\'t be rerolled ("Roll everyone" rolls a new one).');
         return;
       }
       var factions = KEYS.faction.filter(function (f) {
@@ -674,35 +682,6 @@
     }
     commit(p, picks);
     p.counts[cat]++;
-    message('');
-  }
-
-  function rerollPartyFaction(index, faction) {
-    var players = state.players;
-    if (players.some(locked)) { message('A locked hardcore roll keeps the party\'s faction.'); return; }
-    var empty = blankContext();
-    var shared = KEYS.faction.filter(function (f) {
-      return f !== faction && players.every(function (p) { return factionOk(p, f, empty); });
-    });
-    if (!shared.length) { message('No other faction suits every player\'s preferences.'); return; }
-    var chosen = draw(players[index], 'faction', shared);
-    var before = players.map(function (p) { return p.roll; });
-    var allPicks = [];
-    players.forEach(function (p) { p.roll = null; });
-    for (var i = 0; i < players.length; i++) {
-      var ctx = Object.assign(partyContext(i), { faction: chosen });
-      var result = rollCharacter(players[i], ctx, { profs: before[i].profs });
-      if (result.error) {
-        players.forEach(function (p, j) { p.roll = before[j]; });
-        message(esc(players[i].name) + ': ' + result.error + '.');
-        return;
-      }
-      players[i].roll = result.roll;
-      allPicks.push(result.picks);
-    }
-    players.forEach(function (p, i) { commit(p, allPicks[i]); });
-    commit(players[index], [{ cat: 'faction', key: chosen }]);
-    players[index].counts.faction++;
     message('');
   }
 
@@ -1034,6 +1013,7 @@
     });
     if (players.length > 40) players = players.slice(0, 40);
     state.players = players;
+    renumberPlayers();
     state.tab = 0;
     message('Loaded ' + decoded.reduce(function (n, d) { return n + d.players.length; }, 0) + ' player(s)' +
       (notes.length ? ': ' + notes.join(', ') : '') + '.', 'good');
@@ -1085,15 +1065,17 @@
       '<input type="text" class="pname" data-i="' + index + '" value="' + esc(p.name) +
       '" maxlength="24" aria-label="Name">' +
       '<span class="badge" data-tip="' + esc(countsTip(p)) + '">&#x21bb; ' + totalRerolls(p) + '</span>' +
-      (r && can ? '<button class="reroll faction-reroll" data-act="reroll" data-cat="faction" data-i="' + index +
-        '" data-tip="Reroll faction (' + p.counts.faction + ' so far)' +
-        (party && state.party.faction === 'same' ? ': everyone moves to the other faction' : '') +
-        '">&#x21bb; Faction</button>' : '') +
+      (r && can && !(party && state.party.faction === 'same') ? '<button class="reroll faction-reroll" ' +
+        'data-act="reroll" data-cat="faction" data-i="' + index + '" data-tip="Reroll faction (' + p.counts.faction +
+        ' so far)">&#x21bb; Faction</button>' : '') +
       '<button data-act="roll" data-i="' + index + '"' + (locked(p) ? ' disabled' : '') + '>' +
       (r ? 'Reroll all' : 'Roll') + '</button>' +
       '<button class="quiet" data-act="prefs" data-i="' + index + '" data-tip="Preferences">&#x2699;</button>' +
       '<button class="quiet" data-act="copy" data-i="' + index + '" data-tip="Copy this player\'s code">Code</button>' +
-      (party ? '<button class="quiet" data-act="remove" data-i="' + index + '" data-tip="Remove">&#x2715;</button>' :
+      (r ? '<button class="quiet" data-act="clear" data-i="' + index + '" data-tip="Clear this roll and its reroll ' +
+        'counts (keeps the player and their preferences)">&#x21ba;</button>' : '') +
+      (index > 0 ? '<button class="quiet" data-act="remove" data-i="' + index +
+        '" data-tip="Remove">&#x2715;</button>' :
         '') + '</div>';
 
     if (!r) {
@@ -1368,8 +1350,15 @@
         message(esc(state.players[index].name) + '\'s code copied.', 'good');
         renderWorld();
       });
+    } else if (act === 'clear') {
+      var cleared = state.players[index];
+      cleared.roll = null;
+      cleared.counts = zeroCounts();
+      cleared.decks = {};
     } else if (act === 'remove') {
+      if (index < 1) return; // player 1 leads the party (.coop create) and stays
       state.players.splice(index, 1);
+      renumberPlayers();
       state.tab = Math.min(state.tab, state.players.length - 1);
     } else if (act === 'seed') {
       newWorldSeed();
@@ -1437,6 +1426,7 @@
     var p = newPlayer(state.players.length + 1);
     p.settings = JSON.parse(JSON.stringify(state.players[0].settings)); // start from player 1's preferences
     state.players.push(p);
+    renumberPlayers();
     render();
   });
   $('reset').addEventListener('click', function () {
@@ -1466,7 +1456,7 @@
   document.addEventListener('mouseover', function (e) {
     var el = e.target.closest ? e.target.closest('[data-tip]') : null;
     if (!el) { tip.style.display = 'none'; return; }
-    tip.textContent = el.getAttribute('data-tip');
+    tip.textContent = el.getAttribute('data-tip').replace(/\s+/g, ' ').replace(/ \| /g, '\n');
     tip.style.display = 'block';
   });
   document.addEventListener('mousemove', function (e) {

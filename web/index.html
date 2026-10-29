@@ -41,8 +41,8 @@
       </label>
       <button id="roll-all">Roll everyone</button>
       <button id="add-player" class="quiet">Add player</button>
-      <button id="reset" class="quiet" title="Clears every roll, locked hardcore rolls and reroll counts">
-        Start over</button>
+      <button id="reset" class="quiet" data-tip="Every player keeps their name and preferences; their rolls (locked
+        hardcore ones too) and reroll counts are cleared">Clear all rolls</button>
     </div>
     <p id="world" class="muted" style="margin:12px 0 0"></p>
     <p id="msg" class="msg" style="margin:8px 0 0"></p>
@@ -54,28 +54,45 @@
       types <code>.coop create</code> and the others <code>.coop join</code> with the 6 letter code it gives, so you all
       start in the same place (one faction).</p>
     <div class="controls">
-      <label class="field"><span>Faction</span>
+      <label class="field"><span>Faction <i class="info" data-tip="Same faction for everyone: player 1's preferences
+          pick a faction every player allows, and everyone rolls in it (co-op in game needs one faction); no faction
+          rerolls. | Each player rolls
+          their own: every player's own faction preferences. | All different: no two players share a faction, so two
+          players at most.">i</i></span>
         <select id="rule-faction">
           <option value="same">Same faction for everyone</option>
           <option value="free">Each player rolls their own</option>
           <option value="different">All different (2 players at most)</option>
         </select>
       </label>
-      <div class="field"><span>May be the same for two players</span>
+      <div class="field"><span>May be the same for two players <i class="info" data-tip="Ticked: two players may roll
+          the same race / class / spec. | Unticked: each one appears once in the party, so with Class unticked a party
+          of
+          five has five different classes. | Spec only matters between players of the same class.">i</i></span>
         <div class="checks" style="padding:6px 0">
           <label class="check"><input type="checkbox" id="dup-race"> Race</label>
           <label class="check"><input type="checkbox" id="dup-class"> Class</label>
           <label class="check"><input type="checkbox" id="dup-spec"> Spec (same class)</label>
         </div>
       </div>
-      <label class="field"><span>Professions</span>
+      <label class="field"><span>Professions <i class="info" data-tip="Duplicates allowed: any player may roll any
+          profession, even one someone else has. | Not in the same slot: two players can't share their Profession 1, nor
+          their Profession 2, but one player's Profession 1 may be another's Profession 2 (Mining + Alchemy next to
+          Herbalism + Mining is fine). | Never twice in the party: each profession appears once in the whole party, in
+          either slot.">i</i></span>
         <select id="dup-prof">
           <option value="yes">Duplicates allowed</option>
           <option value="slot">Not in the same slot (Profession 1 / 2)</option>
           <option value="no">Never twice in the party</option>
         </select>
       </label>
-      <label class="field"><span>Compatible professions</span>
+      <label class="field"><span>Compatible professions <i class="info" data-tip="Off: the two professions are rolled
+          freely. | Each player's two go together: every player gets a pair that works on one character: a gathering
+          profession with the crafting one it supplies (Skinning + Leatherworking, Mining + Blacksmithing / Engineering
+          / Jewelcrafting, Herbalism + Alchemy / Inscription), or Tailoring + Enchanting. | The party covers itself:
+          every crafting profession in the party has its gathering profession somewhere in the party, and every
+          gathering profession supplies someone's crafting, so a player with Mining + Alchemy and one with Herbalism +
+          Jewelcrafting supply each other. | Solo, this means your own pair has to supply itself.">i</i></span>
         <select id="compat">
           <option value="off">Off</option>
           <option value="player">Each player's two go together (Skinning + Leatherworking)</option>
