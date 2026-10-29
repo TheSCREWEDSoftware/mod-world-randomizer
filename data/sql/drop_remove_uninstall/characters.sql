@@ -9,6 +9,10 @@
 --     its account instead, remove the comment marks from the block below before running this file.
 --     A character whose name was taken since stays deleted; restore it under a new name with the command.
 
+-- The custom spell IDs, if you changed them in the config
+SET @HealthRegenSpellID := 150110; -- Randomizer.Achievements.HealthRegenSpell
+SET @ManaRegenSpellID := 150111;   -- Randomizer.Achievements.ManaRegenSpell
+
 -- UPDATE `characters` AS c
 --     JOIN `world_randomizer_hardcore` AS h ON h.`guid` = c.`guid` AND h.`soft_deleted` = 1
 --     LEFT JOIN (SELECT DISTINCT `name` FROM `characters`) AS taken ON taken.`name` = c.`deleteInfos_Name`
@@ -17,7 +21,7 @@
 -- WHERE c.`deleteInfos_Account` IS NOT NULL AND taken.`name` IS NULL;
 
 -- The achievement regen auras, if a character was saved with them
-DELETE FROM `character_aura` WHERE `spell` IN (150110, 150111);
+DELETE FROM `character_aura` WHERE `spell` IN (@HealthRegenSpellID, @ManaRegenSpellID);
 
 -- The module's tables
 DROP TABLE IF EXISTS `world_randomizer_state`;

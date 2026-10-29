@@ -2,6 +2,11 @@
 -- see src/WorldRandomizerAchievements.h. `icon` is a texture name from Interface\Icons (shown by the addon).
 -- Only achievements whose `expansion` matches Randomizer.Achievements.Expansion count; the addon shows the other
 -- versions (same `parent_id`) as alternatives.
+
+-- The regen reward spells. Change them (and Randomizer.Achievements.HealthRegenSpell / ManaRegenSpell)
+-- if 150110 / 150111 are taken.
+SET @HealthRegenSpellID := 150110;
+SET @ManaRegenSpellID := @HealthRegenSpellID + 1; -- 150111
 CREATE TABLE IF NOT EXISTS `world_randomizer_achievement` (
     `id` INT UNSIGNED NOT NULL,
     `category` TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -31,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `world_randomizer_achievement_reward` (
 
 -- Server side auras for the regen rewards: SPELL_AURA_MOD_HEALTH_REGEN_PERCENT (88) and
 -- SPELL_AURA_MOD_POWER_REGEN_PERCENT (110, mana). The module sets the amount.
-DELETE FROM `spell_dbc` WHERE `ID` IN (150110, 150111);
+DELETE FROM `spell_dbc` WHERE `ID` IN (@HealthRegenSpellID, @ManaRegenSpellID);
 INSERT INTO `spell_dbc` (`ID`, `Attributes`, `Effect_1`, `EffectAura_1`, `EffectMiscValue_1`, `Name_Lang_enUS`, `ProcChance`, `RangeIndex`, `EquippedItemClass`) VALUES
-(150110, 448, 6, 88, 0, 'Randomizer - Health Regen', 101, 1, -1),
-(150111, 448, 6, 110, 0, 'Randomizer - Mana Regen', 101, 1, -1);
+(@HealthRegenSpellID, 448, 6, 88, 0, 'Randomizer - Health Regen', 101, 1, -1),
+(@ManaRegenSpellID, 448, 6, 110, 0, 'Randomizer - Mana Regen', 101, 1, -1);

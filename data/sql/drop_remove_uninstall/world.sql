@@ -6,6 +6,10 @@
 -- as the module is gone. The player stats tables below are the module's own copies; the core's
 -- `player_class_stats` / `player_race_stats` are never touched.
 
+-- The custom spell IDs, if you changed them in the config
+SET @HealthRegenSpellID := 150110; -- Randomizer.Achievements.HealthRegenSpell
+SET @ManaRegenSpellID := 150111;   -- Randomizer.Achievements.ManaRegenSpell
+
 -- The module's tables
 DROP TABLE IF EXISTS `world_randomizer_zone`;
 DROP TABLE IF EXISTS `world_randomizer_zone_link`;
@@ -17,9 +21,8 @@ DROP TABLE IF EXISTS `world_randomizer_dungeon_bracket`;
 DROP TABLE IF EXISTS `world_randomizer_achievement`;
 DROP TABLE IF EXISTS `world_randomizer_achievement_reward`;
 
--- The achievement regen auras (Randomizer.Achievements.HealthRegenSpell / ManaRegenSpell; change the ids if you
--- changed them in the config)
-DELETE FROM `spell_dbc` WHERE `ID` IN (150110, 150111);
+-- The achievement regen auras
+DELETE FROM `spell_dbc` WHERE `ID` IN (@HealthRegenSpellID, @ManaRegenSpellID);
 
 -- Forget the applied files, so a later reinstall runs them again
 DELETE FROM `updates` WHERE `state` = 'MODULE' AND `name` IN ('01_world_randomizer_tables.sql',
