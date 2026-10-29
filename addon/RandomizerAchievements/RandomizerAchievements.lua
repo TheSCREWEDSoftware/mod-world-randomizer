@@ -374,7 +374,14 @@ local function OnMessage(message)
     local kind = parts[1]
     available = true
 
-    if kind == "C" then
+    if kind == "L" then
+        -- The server gives talent points before level 10: open the talent frame from that level
+        local level = tonumber(parts[2])
+        if level and level >= 1 and level < 10 then
+            SHOW_TALENT_LEVEL = level
+            if UpdateMicroButtons then UpdateMicroButtons() end
+        end
+    elseif kind == "C" then
         local id = tonumber(parts[2])
         for _, cat in ipairs(categories) do
             if cat[1] == id then return end

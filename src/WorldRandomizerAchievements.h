@@ -67,6 +67,7 @@ enum RandomizerAchReward : uint8
 //                     "S\t<name>\t<done>\t<total>\t<deaths>\t<zones>\t<quests>\t<rares>\t<gold>\t<level cap>"
 //                     "P\t<id>:<done 0/1>:<progress>:<required>,..."
 //                     "E\tDEF\t<count>\t<expansion 1-3>" / "E\tGET\t<name>"   end of a reply;  "X\t<error>"
+//                     "L\t<level>"  first talent point level (Randomizer.Talents.StartLevel), before a DEF reply
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
 
 namespace WorldRandomizerAchievements

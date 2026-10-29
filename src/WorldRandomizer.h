@@ -143,6 +143,9 @@ struct RandomizerConfig
     float xpRateVanilla = 1.0f;
     float xpRateTBC = 0.75f;
     float xpRateWrath = 0.5f;
+
+    uint8 talentStartLevel = 10; // first talent point at this level (10 = as normal)
+    bool talentKeepTotal = true; // same points at max level, spread from talentStartLevel
 };
 
 // A shifted quest's values before the shift (.randomizer quests)

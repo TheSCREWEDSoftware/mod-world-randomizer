@@ -9,6 +9,7 @@
 #include "Map.h"
 #include "Player.h"
 #include "ScriptMgr.h"
+#include "World.h"
 
 class WorldRandomizerWorldScript : public WorldScript
 {
@@ -51,8 +52,39 @@ public:
     WorldRandomizerPlayerScript() : PlayerScript("WorldRandomizerPlayerScript", {
         PLAYERHOOK_ON_FIRST_LOGIN,
         PLAYERHOOK_ON_LOGIN,
-        PLAYERHOOK_ON_GIVE_EXP
+        PLAYERHOOK_ON_GIVE_EXP,
+        PLAYERHOOK_ON_CALCULATE_TALENTS_POINTS
     }) { }
+
+    // Talents before level 10: the first point at Talents.StartLevel. KeepTotal spreads the usual points at max level
+    // (71 at 80) from there, so nobody ends up with more; otherwise every level from StartLevel gives one.
+    void OnPlayerCalculateTalentsPoints(Player const* player, uint32& talentPointsForLevel) override
+    {
+        RandomizerConfig const& config = sWorldRandomizer->Config();
+        if (config.talentStartLevel >= 10 || player->IsClass(CLASS_DEATH_KNIGHT, CLASS_CONTEXT_TALENT_POINT_CALC))
+            return;
+
+        uint32 level = player->GetLevel();
+        uint32 start = config.talentStartLevel;
+        uint32 normal = level < 10 ? 0 : level - 9;
+        uint32 wanted = 0;
+        if (level >= start)
+        {
+            uint32 maxLevel = std::max<uint32>(10, sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
+            if (config.talentKeepTotal)
+            {
+                uint32 total = maxLevel - 9;
+                uint32 span = maxLevel - start + 1;
+                uint32 steps = std::min(level, maxLevel) - start + 1;
+                wanted = (steps * total + span - 1) / span + (level > maxLevel ? level - maxLevel : 0);
+            }
+            else
+                wanted = level - start + 1;
+        }
+
+        int64 points = int64(talentPointsForLevel) + int64(wanted) - int64(normal);
+        talentPointsForLevel = uint32(std::max<int64>(0, points));
+    }
 
     void OnPlayerFirstLogin(Player* player) override
     {

@@ -184,6 +184,7 @@ public:
     bool announce = true;
     uint32 baseLevelCap = 0;
     uint32 deathMinLevel = 10;
+    bool groupCredit = true;
     uint32 healthRegenSpell = 150110;
     uint32 manaRegenSpell = 150111;
     uint8 expansionSetting = 0;
@@ -196,6 +197,7 @@ public:
         announce = enable && sConfigMgr->GetOption<bool>("Randomizer.Achievements.Announce", true);
         baseLevelCap = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.BaseLevelCap", 0);
         deathMinLevel = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.DeathMinLevel", 10);
+        groupCredit = sConfigMgr->GetOption<bool>("Randomizer.Achievements.GroupCredit", true);
         healthRegenSpell = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.HealthRegenSpell", 150110);
         manaRegenSpell = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.ManaRegenSpell", 150111);
 
@@ -831,6 +833,10 @@ public:
         if (msg.compare(0, prefix.size(), prefix) != 0)
             return false;
 
+        // The level of the first talent point, so the addon can open the talent frame before level 10
+        if (msg.compare(prefix.size(), 3, "DEF") == 0)
+            SendAddon(player, Acore::StringFormat("L\t{}", uint32(sWorldRandomizer->Config().talentStartLevel)));
+
         if (!enable)
         {
             SendAddon(player, "X\tAchievements are off on this server.");
@@ -1254,10 +1260,27 @@ public:
     }
 
 private:
+    // The killer, and with GroupCredit everyone in the group close enough to share the kill's XP and loot
     void OnKill(Player* player, Creature* killed)
     {
         if (!sRandomizerAch->enable || !player || !killed)
             return;
+
+        Group* group = sRandomizerAch->groupCredit ? player->GetGroup() : nullptr;
+        if (!group)
+        {
+            CreditKill(player, killed);
+            return;
+        }
+
+        for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+            if (Player* member = itr->GetSource())
+                if (member == player || (member->IsInMap(killed) && member->IsAtGroupRewardDistance(killed)))
+                    CreditKill(member, killed);
+    }
+
+    void CreditKill(Player* player, Creature* killed)
+    {
 
         CreatureTemplate const* cInfo = killed->GetCreatureTemplate();
         if (cInfo && (cInfo->rank == CREATURE_ELITE_RARE || cInfo->rank == CREATURE_ELITE_RAREELITE))

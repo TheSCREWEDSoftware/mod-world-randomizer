@@ -254,6 +254,9 @@ void WorldRandomizerMgr::LoadConfig()
     c.xpRateTBC = sConfigMgr->GetOption<float>("Randomizer.Stats.XPRate.TBC", 0.75f);
     c.xpRateWrath = sConfigMgr->GetOption<float>("Randomizer.Stats.XPRate.Wrath", 0.5f);
 
+    c.talentStartLevel = std::clamp<uint8>(sConfigMgr->GetOption<uint8>("Randomizer.Talents.StartLevel", 10), 1, 10);
+    c.talentKeepTotal = sConfigMgr->GetOption<bool>("Randomizer.Talents.KeepTotal", true);
+
     // The master switch turns every feature off
     if (!c.moduleEnable)
     {
@@ -263,6 +266,7 @@ void WorldRandomizerMgr::LoadConfig()
         c.hardcoreMode = 0;
         c.era = StatEra::Unchanged;
         c.coopEnable = false;
+        c.talentStartLevel = 10;
     }
 
     _config = c;

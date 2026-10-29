@@ -32,11 +32,16 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   (or locked, or left a ghost), and `world_randomizer_hardcore` keeps it with its owner account, level, killer and
   date. A bugged death is undone with `.hardcore restore <name or GUID> [reason]`.
 
+- **Talents earlier** (optional): `Randomizer.Talents.StartLevel` gives the first talent point before level 10
+  (1 to 10). By default the usual total at max level is spread from there (71 at 80); the addon opens the talent
+  frame from that level.
+
 - **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
   `.coop join <code>` and start in the same place, in the leader's group.
 
 - **Achievements**: 144 account-wide achievements (levels, zones, quests, gold, HP, deaths, rares, weapon skills,
   professions, specializations...) whose rewards count on every character of the account. See below.
+  Kills count for the whole group nearby (`Randomizer.Achievements.GroupCredit`), not only the killing blow.
 
 Every feature has its own switch; `Randomizer.Enable` is the master switch and `Randomizer.Announce` the login
 message. Nothing is written to `creature`: the swaps happen in memory at startup. `Randomizer.World.Enable = 0`

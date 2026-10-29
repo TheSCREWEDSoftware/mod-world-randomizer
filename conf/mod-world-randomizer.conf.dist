@@ -362,6 +362,15 @@ Randomizer.Achievements.Expansion = 0
 Randomizer.Achievements.Announce = 1
 
 #
+#    Randomizer.Achievements.GroupCredit
+#        Description: A kill counts for everyone in the group close enough to share its XP (rare kills, kills of
+#                     higher level creatures), not only for whoever landed the killing blow.
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Achievements.GroupCredit = 1
+
+#
 #    Randomizer.Achievements.BaseLevelCap
 #        Description: Level cap before the "+N Max Level Cap" rewards. 0 = no cap from this module (those rewards
 #                     then do nothing). The shipped achievements give up to +12 levels, so 68 reaches 80.
@@ -407,3 +416,22 @@ Randomizer.Stats.Era = 0
 Randomizer.Stats.XPRate.Vanilla = 1.0
 Randomizer.Stats.XPRate.TBC = 0.75
 Randomizer.Stats.XPRate.Wrath = 0.5
+
+#
+#    Randomizer.Talents.StartLevel
+#        Description: Level of the first talent point, 1 to 10 (10 = as normal). The RandomizerAchievements addon
+#                     opens the talent frame from that level (the client hides it before 10 otherwise).
+#                     Death Knights are left alone.
+#        Default:     10
+
+Randomizer.Talents.StartLevel = 10
+
+#
+#    Randomizer.Talents.KeepTotal
+#        Description: With Talents.StartLevel below 10:
+#                     1 = the same points at max level as normal (71 at 80), spread from StartLevel on
+#                         (StartLevel 1: 1 point at level 1, 9 at level 10, 36 at 40, 71 at 80).
+#                     0 = one point every level from StartLevel (StartLevel 1: 80 points at 80).
+#        Default:     1
+
+Randomizer.Talents.KeepTotal = 1
