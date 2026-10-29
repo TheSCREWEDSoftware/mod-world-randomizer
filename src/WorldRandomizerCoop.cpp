@@ -219,7 +219,7 @@ private:
             "({}, '{}', {})", guid, code, GameTime::GetGameTime().count());
 
         WorldLocation home(party.mapId, party.x, party.y, party.z, party.o);
-        player->SetHomebind(home, party.zoneId);
+        RandomizerSetHomebind(player, home, party.zoneId);
         player->TeleportTo(party.mapId, party.x, party.y, party.z, party.o);
     }
 

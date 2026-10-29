@@ -26,6 +26,7 @@
 
 class Map;
 class Player;
+class WorldLocation;
 
 // Mulberry32. The web map (web/randomizer.js) uses the same generator, so a seed gives the same shuffle there.
 class RandomizerRng
@@ -166,6 +167,10 @@ struct StartLocation
     float z = 0.0f;
     TeamId team = TEAM_NEUTRAL;
 };
+
+// Sets the hearthstone and tells the client, so the hearthstone shows the new place right away (the core's
+// SetHomebind only saves it; the client would show the old one until the next login)
+void RandomizerSetHomebind(Player* player, WorldLocation const& location, uint32 areaId);
 
 class WorldRandomizerMgr
 {

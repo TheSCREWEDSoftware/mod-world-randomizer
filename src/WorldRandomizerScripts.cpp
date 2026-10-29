@@ -100,7 +100,7 @@ public:
             return;
 
         WorldLocation home(location.mapId, location.x, location.y, location.z, player->GetOrientation());
-        player->SetHomebind(home, location.zoneId);
+        RandomizerSetHomebind(player, home, location.zoneId);
         player->TeleportTo(location.mapId, location.x, location.y, location.z, player->GetOrientation());
 
         if (RandomizerZone const* zone = sWorldRandomizer->FindZone(location.zoneId))

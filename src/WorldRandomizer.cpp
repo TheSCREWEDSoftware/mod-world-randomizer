@@ -21,6 +21,7 @@
 #include "StringConvert.h"
 #include "Tokenize.h"
 #include "World.h"
+#include "WorldPacket.h"
 
 #include <algorithm>
 #include <array>
@@ -902,6 +903,19 @@ void WorldRandomizerMgr::ShiftQuests()
 
         ++_questsShifted;
     }
+}
+
+void RandomizerSetHomebind(Player* player, WorldLocation const& location, uint32 areaId)
+{
+    player->SetHomebind(location, areaId);
+
+    WorldPacket data(SMSG_BINDPOINTUPDATE, 5 * 4);
+    data << float(location.GetPositionX());
+    data << float(location.GetPositionY());
+    data << float(location.GetPositionZ());
+    data << uint32(location.GetMapId());
+    data << uint32(areaId);
+    player->SendDirectMessage(&data);
 }
 
 QuestOriginal const* WorldRandomizerMgr::GetQuestOriginal(uint32 questId) const
