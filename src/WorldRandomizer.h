@@ -109,6 +109,7 @@ struct RandomizerConfig
     bool computeMissingZones = true;
     bool shiftQuests = true;      // quests of moved zones follow their creatures (level, level requirement, XP)
     bool shiftQuestMoney = true;  // and their reward money
+    bool questMinLevelFromBracket = true; // level requirement = the bottom of the zone's new bracket
     std::vector<uint32> excludeEntries;
 
     uint8 dungeonMode = 2; // 0 unchanged, 1 shift by as much as the entrance zone moved, 2 scale to the group
@@ -144,6 +145,14 @@ struct RandomizerConfig
     float xpRateWrath = 0.5f;
 };
 
+// A shifted quest's values before the shift (.randomizer quests)
+struct QuestOriginal
+{
+    int32 level = 0;
+    uint32 minLevel = 0;
+    int32 money = 0;
+};
+
 struct StartLocation
 {
     uint32 mapId = 0;
@@ -169,6 +178,7 @@ public:
     RandomizerZone const* FindZone(uint32 zoneId) const;
     std::size_t ReplacedCount() const { return _replaced; }
     std::size_t ShiftedCount() const { return _spawnZone.size(); }
+    QuestOriginal const* GetQuestOriginal(uint32 questId) const;
 
     // Level hooks
     bool AdjustLevel(Map* map, ObjectGuid::LowType spawnId, uint8& level) const;
@@ -209,6 +219,7 @@ private:
     std::vector<StartLocation> _startLocations;
     std::size_t _replaced = 0;
     std::size_t _questsShifted = 0;
+    std::unordered_map<uint32, QuestOriginal> _questOriginal;
 
     bool _statsApplied = false;
 };

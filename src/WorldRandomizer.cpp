@@ -229,6 +229,7 @@ void WorldRandomizerMgr::LoadConfig()
 
     c.shiftQuests = sConfigMgr->GetOption<bool>("Randomizer.Quests.Shift", true);
     c.shiftQuestMoney = sConfigMgr->GetOption<bool>("Randomizer.Quests.ShiftMoney", true);
+    c.questMinLevelFromBracket = sConfigMgr->GetOption<bool>("Randomizer.Quests.MinLevelFromBracket", true);
 
     c.playerStart = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.Enable", true);
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
@@ -845,6 +846,7 @@ namespace
 void WorldRandomizerMgr::ShiftQuests()
 {
     _questsShifted = 0;
+    _questOriginal.clear();
     for (auto const& [questId, quest] : sObjectMgr->GetQuestTemplates())
     {
         if (quest->GetZoneOrSort() <= 0)
@@ -861,6 +863,7 @@ void WorldRandomizerMgr::ShiftQuests()
             continue;
 
         Bracket const& to = _config.brackets[zone->bracket];
+        _questOriginal[questId] = { quest->GetQuestLevel(), quest->GetMinLevel(), quest->GetRewOrReqMoney(0) };
         int32 oldLevel = quest->GetQuestLevel();
         int32 newLevel = oldLevel;
         if (oldLevel > 0) // -1 = the player's own level
@@ -872,8 +875,10 @@ void WorldRandomizerMgr::ShiftQuests()
 
         if (quest->GetMinLevel() > 0)
         {
-            uint32 minLevel = RemapLevel(uint8(std::min<uint32>(quest->GetMinLevel(), MAX_LEVEL)), zone->levelMin,
-                zone->levelMax, to.levelMin, to.levelMax);
+            // The whole zone is meant for its bracket: by default any quest there can be taken from its bottom level
+            uint32 minLevel = _config.questMinLevelFromBracket ? to.levelMin :
+                RemapLevel(uint8(std::min<uint32>(quest->GetMinLevel(), MAX_LEVEL)), zone->levelMin, zone->levelMax,
+                    to.levelMin, to.levelMax);
             if (newLevel > 0)
                 minLevel = std::min<uint32>(minLevel, uint32(newLevel));
             quest->*QuestFieldAccess::MinLevel = minLevel;
@@ -892,6 +897,12 @@ void WorldRandomizerMgr::ShiftQuests()
 
         ++_questsShifted;
     }
+}
+
+QuestOriginal const* WorldRandomizerMgr::GetQuestOriginal(uint32 questId) const
+{
+    auto itr = _questOriginal.find(questId);
+    return itr != _questOriginal.end() ? &itr->second : nullptr;
 }
 
 void WorldRandomizerMgr::PublishDungeonBrackets()

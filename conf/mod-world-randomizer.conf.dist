@@ -165,6 +165,17 @@ Randomizer.Quests.Shift = 1
 Randomizer.Quests.ShiftMoney = 1
 
 #
+#    Randomizer.Quests.MinLevelFromBracket
+#        Description: With Quests.Shift, every shifted quest can be taken from the bottom of its zone's new bracket
+#                     (a 1-10 zone's quests from level 1, a 41-50 zone's from level 41), instead of its own level
+#                     requirement squeezed into the bracket. The quest's own level, XP and colour don't change.
+#                     .randomizer quests shows the levels, before and after.
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Quests.MinLevelFromBracket = 1
+
+#
 #    Randomizer.Creatures.ComputeMissingZones
 #        Description: Most rows of `creature` have zoneId 0. The first start works out their zones from the
 #                     terrain (slow once) and saves them in `world_randomizer_spawn_zone`. You can also run

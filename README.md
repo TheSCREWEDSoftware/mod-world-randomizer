@@ -13,7 +13,8 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
 - **Kept creatures** (quest kill targets, spawns with their own scripts) move their level into the new bracket.
 - **Quests** of a moved zone move with it (`Randomizer.Quests.Shift`): their level, so the XP and the colour in the
   quest log follow, their level requirement and their reward money. Elwynn Forest in 41-50 has level 41-50 quests
-  that need level 41 or so. Class, profession and holiday quests keep their levels. This is the same for every
+  that can be taken from level 41 (`Randomizer.Quests.MinLevelFromBracket`: the bottom of the zone's bracket).
+  `.randomizer quests` lists the levels before and after. Class, profession and holiday quests keep their levels. This is the same for every
   player, so it changes the quests in memory at startup rather than through the core's quest level hook (that hook
   is per player, which mod-dynamic-scaling needs and this module doesn't).
 - **Dungeons** follow the bracket their entrance zone landed in. By default (`Randomizer.Dungeons.Mode = 2`) their
@@ -121,6 +122,7 @@ aowow setup.
 | `.randomizer zones` | GM | Every zone and its bracket |
 | `.randomizer reroll [seed]` | admin | Store a new seed; the world changes after a restart |
 | `.randomizer start` | GM | Teleport to a bracket 1 start point for your faction |
+| `.randomizer quests [id]` | GM | Quest levels now and before the shift: one quest, the selected NPC's, or your zone's (green: you can take it) |
 | `.rach` | players | Your account's achievement rewards |
 | `.rach list [category]` | players | Achievements, done or not |
 | `.rach profession [name]` | players | Choose the starting profession (once unlocked) |
