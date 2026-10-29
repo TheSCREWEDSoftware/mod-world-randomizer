@@ -6,6 +6,8 @@
  *   .randomizer reroll [seed] store a new seed (random if none given); takes effect after a restart
  *   .randomizer start         teleport to a random bracket 1 start point for your faction
  *   .randomizer quests [id]   quest levels now and before the shift: one quest, the selected NPC's, or your zone's
+ *   .randomizer roll [code] [n]  tie this character to a roll from the web roller (WorldRandomizerRoll.cpp)
+ *   .randomizer roll clear <name> (GM) untie it
  */
 
 #include "WorldRandomizer.h"
@@ -19,6 +21,9 @@
 #include "Random.h"
 
 using namespace Acore::ChatCommands;
+
+bool HandleRandomizerRollCommand(ChatHandler* handler, Optional<std::string> code, Optional<uint32> number);
+bool HandleRandomizerRollClearCommand(ChatHandler* handler, PlayerIdentifier target);
 
 namespace
 {
@@ -86,8 +91,15 @@ public:
 
     ChatCommandTable GetCommands() const override
     {
+        static ChatCommandTable rollTable =
+        {
+            { "clear", HandleRandomizerRollClearCommand, SEC_GAMEMASTER, Console::Yes },
+            { "",      HandleRandomizerRollCommand,      SEC_PLAYER,     Console::No }
+        };
+
         static ChatCommandTable randomizerTable =
         {
+            { "roll",   rollTable },
             { "info",   HandleInfoCommand,   SEC_PLAYER,        Console::No },
             { "zones",  HandleZonesCommand,  SEC_GAMEMASTER,    Console::Yes },
             { "reroll", HandleRerollCommand, SEC_ADMINISTRATOR, Console::Yes },

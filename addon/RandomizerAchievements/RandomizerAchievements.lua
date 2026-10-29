@@ -25,6 +25,7 @@ local available = nil    -- nil: waiting for the server, true: it answered, fals
 local replyTimeout
 local minimapButton, optionsPanel
 local autoRefresh = 0    -- seconds until the open window asks the server again
+local achievementsOff = false -- the server said achievements are off ("My roll" still works)
 local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
 
 -- Made for the server's current content?
@@ -205,6 +206,12 @@ refresh:SetWidth(80); refresh:SetHeight(22)
 refresh:SetPoint("BOTTOMRIGHT", -20, 18)
 refresh:SetText("Refresh")
 
+local myRoll = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+myRoll:SetWidth(80); myRoll:SetHeight(22)
+myRoll:SetPoint("RIGHT", refresh, "LEFT", -6, 0)
+myRoll:SetText("My roll")
+myRoll:SetScript("OnClick", function() SlashCmdList["RANDACH"]("roll") end)
+
 local whoLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 whoLabel:SetPoint("BOTTOMLEFT", 22, 23)
 whoLabel:SetText("Show:")
@@ -371,10 +378,234 @@ local function Print(text)
     DEFAULT_CHAT_FRAME:AddMessage("|cffFFD100[Randomizer Achievements]|r " .. text)
 end
 
+
+-- ---------------------------------------------------------------- my roll (the web roller's code)
+
+local RACE_NAMES = { [1] = "Human", [2] = "Orc", [3] = "Dwarf", [4] = "Night Elf", [5] = "Undead", [6] = "Tauren",
+    [7] = "Gnome", [8] = "Troll", [10] = "Blood Elf", [11] = "Draenei" }
+local CLASS_NAMES = { [1] = "Warrior", [2] = "Paladin", [3] = "Hunter", [4] = "Rogue", [5] = "Priest",
+    [6] = "Death Knight", [7] = "Shaman", [8] = "Mage", [9] = "Warlock", [11] = "Druid" }
+local CLASS_FILES = { [1] = "WARRIOR", [2] = "PALADIN", [3] = "HUNTER", [4] = "ROGUE", [5] = "PRIEST",
+    [6] = "DEATHKNIGHT", [7] = "SHAMAN", [8] = "MAGE", [9] = "WARLOCK", [11] = "DRUID" }
+local RACE_FILES = { [1] = "Human", [2] = "Orc", [3] = "Dwarf", [4] = "NightElf", [5] = "Scourge", [6] = "Tauren",
+    [7] = "Gnome", [8] = "Troll", [10] = "BloodElf", [11] = "Draenei" }
+local SPEC_NAMES = {
+    [1] = { "Arms", "Fury", "Protection" }, [2] = { "Holy", "Protection", "Retribution" },
+    [3] = { "Beast Mastery", "Marksmanship", "Survival" }, [4] = { "Assassination", "Combat", "Subtlety" },
+    [5] = { "Discipline", "Holy", "Shadow" }, [6] = { "Blood", "Frost", "Unholy" },
+    [7] = { "Elemental", "Enhancement", "Restoration" }, [8] = { "Arcane", "Fire", "Frost" },
+    [9] = { "Affliction", "Demonology", "Destruction" }, [11] = { "Balance", "Feral", "Restoration" } }
+local SPEC_ICONS = {
+    [1] = { "ability_warrior_savageblow", "ability_warrior_innerrage", "ability_warrior_defensivestance" },
+    [2] = { "spell_holy_holybolt", "spell_holy_devotionaura", "spell_holy_auraoflight" },
+    [3] = { "ability_hunter_beasttaming", "ability_marksmanship", "ability_hunter_swiftstrike" },
+    [4] = { "ability_rogue_eviscerate", "ability_backstab", "ability_stealth" },
+    [5] = { "spell_holy_powerwordshield", "spell_holy_guardianspirit", "spell_shadow_shadowwordpain" },
+    [6] = { "spell_deathknight_bloodpresence", "spell_deathknight_frostpresence", "spell_deathknight_unholypresence" },
+    [7] = { "spell_nature_lightning", "spell_nature_lightningshield", "spell_nature_magicimmunity" },
+    [8] = { "spell_holy_magicalsentry", "spell_fire_firebolt02", "spell_frost_frostbolt02" },
+    [9] = { "spell_shadow_deathcoil", "spell_shadow_metamorphosis", "spell_shadow_rainoffire" },
+    [11] = { "spell_nature_starfall", "ability_racial_bearform", "spell_nature_healingtouch" } }
+local PROF_NAMES = { [0] = "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Herbalism", "Inscription",
+    "Jewelcrafting", "Leatherworking", "Mining", "Skinning", "Tailoring" }
+local PROF_ICONS = { [0] = "trade_alchemy", "trade_blacksmithing", "trade_engraving", "trade_engineering",
+    "trade_herbalism", "inv_inscription_tradeskill01", "inv_misc_gem_01", "trade_leatherworking", "trade_mining",
+    "inv_misc_pelt_wolf_01", "trade_tailoring" }
+
+local function Shown(widget, on)
+    if on then widget:Show() else widget:Hide() end
+end
+
+local rollFrame = CreateFrame("Frame", "RandomizerRollFrame", UIParent)
+rollFrame:SetWidth(460); rollFrame:SetHeight(390)
+rollFrame:SetPoint("CENTER", 0, 40)
+rollFrame:SetMovable(true)
+rollFrame:EnableMouse(true)
+rollFrame:RegisterForDrag("LeftButton")
+rollFrame:SetScript("OnDragStart", rollFrame.StartMoving)
+rollFrame:SetScript("OnDragStop", rollFrame.StopMovingOrSizing)
+rollFrame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 },
+})
+rollFrame:SetFrameStrata("DIALOG")
+rollFrame:Hide()
+table.insert(UISpecialFrames, "RandomizerRollFrame")
+
+local rollClose = CreateFrame("Button", nil, rollFrame, "UIPanelCloseButton")
+rollClose:SetPoint("TOPRIGHT", -6, -6)
+
+local rollTitle = rollFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+rollTitle:SetPoint("TOP", 0, -18)
+rollTitle:SetText("My roll")
+
+local rollStatus = rollFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+rollStatus:SetPoint("TOPLEFT", 24, -48)
+rollStatus:SetWidth(410)
+rollStatus:SetJustifyH("LEFT")
+
+-- The tied roll: spec and profession icons with their names on hover
+local rollIcons = {}
+for i = 1, 3 do
+    local icon = CreateFrame("Frame", nil, rollFrame)
+    icon:SetWidth(36); icon:SetHeight(36)
+    icon:SetPoint("TOPLEFT", 24 + (i - 1) * 44, -96)
+    icon.tex = icon:CreateTexture(nil, "ARTWORK")
+    icon.tex:SetAllPoints()
+    icon:EnableMouse(true)
+    icon:SetScript("OnEnter", function(self)
+        if not self.tip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(self.tip)
+        GameTooltip:Show()
+    end)
+    icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    icon:Hide()
+    rollIcons[i] = icon
+end
+
+local codeLabel = rollFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+codeLabel:SetPoint("TOPLEFT", 24, -142)
+codeLabel:SetText("Party or player code from the roller page (WR4....):")
+
+local codeBox = CreateFrame("EditBox", "RandomizerRollCode", rollFrame, "InputBoxTemplate")
+codeBox:SetWidth(320); codeBox:SetHeight(20)
+codeBox:SetPoint("TOPLEFT", 30, -158)
+codeBox:SetAutoFocus(false)
+codeBox:SetMaxLetters(230)
+
+local readButton = CreateFrame("Button", nil, rollFrame, "UIPanelButtonTemplate")
+readButton:SetWidth(80); readButton:SetHeight(22)
+readButton:SetPoint("LEFT", codeBox, "RIGHT", 8, 0)
+readButton:SetText("Read")
+
+local pickLabel = rollFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+pickLabel:SetPoint("TOPLEFT", 24, -190)
+pickLabel:SetText("Who are you? (only players of your race and class can be picked)")
+
+local peek = {}
+local pickButtons = {}
+local function PickButton(index)
+    local button = pickButtons[index]
+    if button then return button end
+    button = CreateFrame("Button", nil, rollFrame, "UIPanelButtonTemplate")
+    button:SetWidth(410); button:SetHeight(22)
+    button:SetPoint("TOPLEFT", 24, -206 - (index - 1) * 24)
+    pickButtons[index] = button
+    return button
+end
+
+local rollState = { on = false, tied = false }
+
+local function UpdateRoll()
+    for i = 1, 3 do rollIcons[i]:Hide() end
+    if rollState.tied then
+        local r = rollState
+        local text = "|cffFFD100" .. r.name .. "'s roll:|r " .. (RACE_NAMES[r.race] or "?") .. " " ..
+            (CLASS_NAMES[r.cls] or "?")
+        local slot = 1
+        if r.spec >= 0 and SPEC_NAMES[r.cls] then
+            text = text .. ", " .. SPEC_NAMES[r.cls][r.spec + 1]
+            rollIcons[slot].tex:SetTexture("Interface\\Icons\\" .. SPEC_ICONS[r.cls][r.spec + 1])
+            rollIcons[slot].tip = SPEC_NAMES[r.cls][r.spec + 1] .. " (talents only go into this tree)"
+            rollIcons[slot]:Show()
+            slot = slot + 1
+        end
+        for _, prof in ipairs({ r.prof1, r.prof2 }) do
+            if prof >= 0 and PROF_NAMES[prof] then
+                text = text .. ", " .. PROF_NAMES[prof]
+                rollIcons[slot].tex:SetTexture("Interface\\Icons\\" .. PROF_ICONS[prof])
+                rollIcons[slot].tip = PROF_NAMES[prof]
+                rollIcons[slot]:Show()
+                slot = slot + 1
+            end
+        end
+        rollStatus:SetText(text .. "\n|cff999999This character follows it for good: talents only in that tree, " ..
+            "only these primary professions.|r")
+    elseif rollState.on then
+        rollStatus:SetText("This character isn't tied to a roll. Paste the code from the roller page, press Read, " ..
+            "then pick who you are. |cffFF6060It can't be undone|r (a GM can).")
+    else
+        rollStatus:SetText("Rolls are off on this server.")
+    end
+
+    local canPick = rollState.on and not rollState.tied
+    Shown(codeBox, canPick)
+    Shown(readButton, canPick)
+    Shown(codeLabel, canPick)
+    Shown(pickLabel, canPick and #peek > 0)
+    local _, myClass = UnitClass("player")
+    local _, myRace = UnitRace("player")
+    for index, entry in ipairs(peek) do
+        local button = PickButton(index)
+        button:SetText(entry.number .. ": " .. entry.name .. " - " .. entry.text)
+        local fits = CLASS_FILES[entry.cls] == myClass and RACE_FILES[entry.race] == myRace
+        if fits then button:Enable() else button:Disable() end
+        button:SetScript("OnClick", function()
+            StaticPopupDialogs["RANDOMIZER_ROLL_CONFIRM"] = {
+                text = "Tie this character to " .. entry.name .. "'s roll (" .. entry.text .. ")?\n\nTalents will " ..
+                    "only go into that tree and trainers will only teach those professions. This can't be undone.",
+                button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
+                OnAccept = function() Send("ROLLSET\t" .. entry.number .. "\t" .. rollState.code) end,
+            }
+            StaticPopup_Show("RANDOMIZER_ROLL_CONFIRM")
+        end)
+        Shown(button, canPick)
+    end
+    for index = #peek + 1, #pickButtons do pickButtons[index]:Hide() end
+end
+
+readButton:SetScript("OnClick", function()
+    local code = codeBox:GetText():gsub("%s", "")
+    if code == "" then return end
+    rollState.code = code
+    peek = {}
+    Send("ROLLPEEK\t" .. code)
+end)
+codeBox:SetScript("OnEnterPressed", function() readButton:Click() end)
+codeBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+rollFrame:SetScript("OnShow", function()
+    Send("ROLL")
+    UpdateRoll()
+end)
+
+-- R / Q / E PEEK from the server; true when it was one of them
+local function OnRollMessage(parts)
+    local kind = parts[1]
+    if kind == "R" then
+        rollState.on = parts[2] == "1"
+        rollState.tied = parts[3] == "1"
+        if rollState.tied then
+            rollState.name = parts[4] or "?"
+            rollState.race = tonumber(parts[5]) or 0
+            rollState.cls = tonumber(parts[6]) or 0
+            rollState.spec = tonumber(parts[7]) or -1
+            rollState.prof1 = tonumber(parts[8]) or -1
+            rollState.prof2 = tonumber(parts[9]) or -1
+            peek = {}
+        end
+        if rollFrame:IsShown() then UpdateRoll() end
+        return true
+    elseif kind == "Q" then
+        table.insert(peek, { number = tonumber(parts[2]), name = parts[3] or "?", race = tonumber(parts[4]) or 0,
+            cls = tonumber(parts[5]) or 0, text = parts[6] or "" })
+        return true
+    elseif kind == "E" and parts[2] == "PEEK" then
+        if #peek == 0 then Print("That is not a roller code (they start with WR4.).") end
+        if rollFrame:IsShown() then UpdateRoll() end
+        return true
+    end
+    return false
+end
+
 local function OnMessage(message)
     local parts = Split(message, "\t")
     local kind = parts[1]
     available = true
+    if OnRollMessage(parts) then return end
 
     if kind == "L" then
         -- The server gives talent points before level 10: open the talent frame from that level
@@ -427,9 +658,12 @@ local function OnMessage(message)
             Redraw()
         end
     elseif kind == "X" then
-        Print(parts[2] or "")
+        local off = parts[2] and parts[2]:find("Achievements are off")
+        if not (off and achievementsOff) then Print(parts[2] or "") end
+        if off then achievementsOff = true end
         summary:SetText(parts[2] or "")
-        if parts[2] and parts[2]:find("off on this server") then Disable() end
+        -- The whole module off: the addon turns itself off. Achievements off: "My roll" still works
+        if parts[2] and parts[2]:find("World Randomizer is off") then Disable() end
     end
 end
 
@@ -466,7 +700,7 @@ end)
 
 events:SetScript("OnUpdate", function(self, elapsed)
     -- Progress changes while you play: the open window asks again every few seconds
-    if frame:IsShown() and available then
+    if frame:IsShown() and available and not achievementsOff then
         autoRefresh = autoRefresh - elapsed
         if autoRefresh <= 0 then
             autoRefresh = 5
@@ -512,7 +746,9 @@ SlashCmdList["RANDACH"] = function(arg)
         Print("Still waiting for the server to answer, try again in a few seconds.")
         return
     end
-    if arg ~= "" then
+    if arg:lower() == "roll" then
+        if rollFrame:IsShown() then rollFrame:Hide() else rollFrame:Show() end
+    elseif arg ~= "" then
         viewing = arg:sub(1, 1):upper() .. arg:sub(2):lower()
         frame:Show()
         Request(viewing)
@@ -530,8 +766,9 @@ local UI_ICON = "Interface\\Icons\\Achievement_General"
 local UI_DEFAULT_ANGLE = 200
 local UI_CLICK_TEXT = "open the achievements"
 local UI_HELP = "Account-wide achievements of mod-world-randomizer, with their rewards, for you and your group.\n\n" ..
-    "/randach - show or hide the window\n/randach <name> - a group member's achievements\n.rach - your rewards " ..
-    "in chat\n\nThe window updates by itself every few seconds while it is open."
+    "/randach - show or hide the window\n/randach <name> - a group member's achievements\n/randach roll - tie " ..
+    "this character to its roll from the roller page\n.rach - your rewards in chat\n\nThe window updates by " ..
+    "itself every few seconds while it is open."
 local function UI_DB()
     RandomizerAchievementsDB = RandomizerAchievementsDB or {}
     return RandomizerAchievementsDB

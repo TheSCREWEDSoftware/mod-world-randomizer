@@ -1299,6 +1299,10 @@
 
     return '<div class="player' + (locked(p) ? ' locked-player' : '') + '">' + head +
       '<div class="tiles">' + tiles + '</div>' + startLine(index) +
+      '<div class="pstart small" data-tip="Ties the character to this roll for good: talents only in the rolled ' +
+      'tree, trainers only teach the rolled professions (and it learns them, with their tools). The race and class ' +
+      'must match.">In game: <code>/randach roll</code> (addon) or <code>.randomizer roll &lt;party code&gt; ' +
+      (index + 1) + '</code></div>' +
       (locked(p) ? '<div class="pnote"><span class="locked">Hardcore roll locked.</span> One life, no rerolls.</div>' :
         '') + '</div>';
   }

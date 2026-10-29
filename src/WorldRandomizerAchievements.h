@@ -10,6 +10,7 @@
 #define MOD_WORLD_RANDOMIZER_ACHIEVEMENTS_H
 
 #include "Define.h"
+#include <string>
 
 #include <unordered_map>
 #include <utility>
@@ -69,6 +70,10 @@ enum RandomizerAchReward : uint8
 //                     "E\tDEF\t<count>\t<expansion 1-3>" / "E\tGET\t<name>"   end of a reply;  "X\t<error>"
 //                     "L\t<level>"  first talent point level (Randomizer.Talents.StartLevel), before a DEF reply
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
+
+class Player;
+// WorldRandomizerRoll.cpp: ROLL / ROLLPEEK / ROLLSET requests; true when it was one
+bool HandleRollAddonMessage(Player* player, std::string const& body);
 
 namespace WorldRandomizerAchievements
 {

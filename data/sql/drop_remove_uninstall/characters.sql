@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS `world_randomizer_state`;
 DROP TABLE IF EXISTS `world_randomizer_hardcore`;
 DROP TABLE IF EXISTS `world_randomizer_hardcore_revive`;
 DROP TABLE IF EXISTS `world_randomizer_hardcore_taint`;
+DROP TABLE IF EXISTS `world_randomizer_roll`;
 DROP TABLE IF EXISTS `world_randomizer_coop`;
 DROP TABLE IF EXISTS `world_randomizer_coop_member`;
 DROP TABLE IF EXISTS `world_randomizer_ach_done`;
@@ -40,4 +41,5 @@ DROP TABLE IF EXISTS `world_randomizer_ach_skill`;
 
 -- Forget the applied file, so a later reinstall runs it again
 DELETE FROM `updates` WHERE `state` = 'MODULE' AND `name` IN ('01_world_randomizer_characters.sql',
+    '02_world_randomizer_roll.sql',
     'world_randomizer_characters.sql');

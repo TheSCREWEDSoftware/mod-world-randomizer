@@ -284,6 +284,28 @@ Randomizer.Coop.SameFaction = 1
 Randomizer.Coop.AutoGroup = 1
 
 #
+#    Randomizer.Roll.Enable
+#        Description: Players can tie a character to its roll from the web roller: .randomizer roll <code>
+#                     <player number> (or the addon's "My roll"). The race and class must match; from then on
+#                     talents only go into the rolled tree and trainers only teach the rolled primary professions.
+#                     It can't be undone by the player; a GM can with .randomizer roll clear <name>.
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Roll.Enable = 1
+
+#
+#    Randomizer.Roll.LearnProfessions
+#    Randomizer.Roll.GiveTools
+#        Description: When a character is tied to its roll, learn the rolled professions (apprentice) right away,
+#                     and give the tools they need: Mining Pick, Skinning Knife, Blacksmith Hammer, Arclight
+#                     Spanner, Jeweler's Kit, Virtuoso Inking Set, Runed Copper Rod.
+#        Default:     1 / 1
+
+Randomizer.Roll.LearnProfessions = 1
+Randomizer.Roll.GiveTools = 1
+
+#
 #    Randomizer.Hardcore.Mode
 #        Description: One life. A hardcore character that dies is never deleted for good: it is kept in the
 #                     characters DB and listed in `world_randomizer_hardcore` with its owner account and how it

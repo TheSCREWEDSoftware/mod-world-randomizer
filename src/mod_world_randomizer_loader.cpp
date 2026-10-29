@@ -8,6 +8,7 @@ void AddWorldRandomizerCommandScripts();
 void AddWorldRandomizerHardcoreScripts();
 void AddWorldRandomizerCoopScripts();
 void AddWorldRandomizerAchievementScripts();
+void AddWorldRandomizerRollScripts();
 
 void Addmod_world_randomizerScripts()
 {
@@ -16,4 +17,5 @@ void Addmod_world_randomizerScripts()
     AddWorldRandomizerHardcoreScripts();
     AddWorldRandomizerCoopScripts();
     AddWorldRandomizerAchievementScripts();
+    AddWorldRandomizerRollScripts();
 }

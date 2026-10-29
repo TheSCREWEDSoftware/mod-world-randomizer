@@ -39,6 +39,12 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   level before the shuffle when there is one; `.coop create <zone id>` starts the party (or just you) in the zone
   you choose, such as the one the roller page shows.
 
+- **Rolls from the roller page** (`Randomizer.Roll.*`): `.randomizer roll <code> <player number>`, or the addon's
+  "My roll" (`/randach roll`), ties a character to its roll for good. The race and class must match; talents then
+  only go into the rolled tree and trainers only teach the rolled primary professions. By default it learns the
+  rolled professions right away and gives their tools (Mining Pick, Skinning Knife...). A GM unties a character with
+  `.randomizer roll clear <name>`.
+
 - **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
   `.coop join <code>` and start in the same place, in the leader's group.
 
@@ -111,6 +117,7 @@ World DB:
 Characters DB:
 
 - `world_randomizer_state`: the world seed.
+- `world_randomizer_roll` (characters DB): characters tied to a roll (race, class, spec, professions).
 - `world_randomizer_hardcore`: every hardcore character, owner account, status, level, killer, death date.
 - `world_randomizer_hardcore_revive`: every restore, with the GM and the reason.
 - `world_randomizer_hardcore_taint`: characters ruled out of going hardcore (a trade, a mail, reaching level 2, a
@@ -131,6 +138,8 @@ aowow setup.
 | `.randomizer reroll [seed]` | admin | Store a new seed; the world changes after a restart |
 | `.randomizer start` | GM | Teleport to a bracket 1 start point for your faction |
 | `.randomizer quests [id]` | GM | Quest levels now and before the shift: one quest, the selected NPC's, or your zone's (green: you can take it) |
+| `.randomizer roll [code] [n]` | players | Show your roll, list a code's players, or tie this character to player n's roll |
+| `.randomizer roll clear <name>` | GM | Untie a character from its roll |
 | `.rach` | players | Your account's achievement rewards |
 | `.rach list [category]` | players | Achievements, done or not |
 | `.rach profession [name]` | players | Choose the starting profession (once unlocked) |

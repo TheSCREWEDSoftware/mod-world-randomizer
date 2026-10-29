@@ -847,6 +847,17 @@ public:
         if (msg.compare(0, prefix.size(), prefix) != 0)
             return false;
 
+        // Module off: the addon turns itself off on this message
+        if (!sWorldRandomizer->Config().moduleEnable)
+        {
+            SendAddon(player, "X\tThe World Randomizer is off on this server.");
+            return true;
+        }
+
+        // Rolls from the web roller (WorldRandomizerRoll.cpp) work whether achievements are on or not
+        if (HandleRollAddonMessage(player, msg.substr(prefix.size())))
+            return true;
+
         // The level of the first talent point, so the addon can open the talent frame before level 10
         if (msg.compare(prefix.size(), 3, "DEF") == 0)
             SendAddon(player, Acore::StringFormat("L\t{}", TalentFrameLevel(player)));
