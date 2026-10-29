@@ -229,6 +229,17 @@ Randomizer.PlayerStart.Enable = 1
 Randomizer.PlayerStart.FactionLock = 1
 
 #
+#    Randomizer.PlayerStart.PreferLowZones
+#        Description: 1 = among the bracket 1 zones, start in one that was already low level before the shuffle
+#                     (its home bracket is bracket 1, like Azuremyst Isle) when there is one, rather than a zone
+#                     squeezed down from higher levels (Bloodmyst Isle 8-24 in 1-10 has level 5-9 creatures
+#                     around its graveyards). 0 = any bracket 1 zone.
+#                     The co-op leader can still choose: .coop create <zone id> (the web page shows the id).
+#        Default:     1
+
+Randomizer.PlayerStart.PreferLowZones = 1
+
+#
 #    Randomizer.PlayerStart.SkipDeathKnights
 #        Description: Death Knights keep their normal Ebon Hold start.
 #        Default:     1
@@ -421,7 +432,8 @@ Randomizer.Stats.XPRate.Wrath = 0.5
 #    Randomizer.Talents.StartLevel
 #        Description: Level of the first talent point, 1 to 10 (10 = as normal). The RandomizerAchievements addon
 #                     opens the talent frame from that level (the client hides it before 10 otherwise).
-#                     Death Knights are left alone.
+#                     Death Knights are left alone. Bonus talent points from achievements open the frame
+#                     from level 1 whatever this is.
 #        Default:     10
 
 Randomizer.Talents.StartLevel = 10

@@ -120,7 +120,7 @@ public:
         return itr != _parties.end() ? &itr->second : nullptr;
     }
 
-    std::string Create(Player* player)
+    std::string Create(Player* player, uint32 startZone)
     {
         std::string code;
         do
@@ -137,7 +137,7 @@ public:
         // Where the party starts: a random bracket 1 zone for the leader's faction, or right here
         StartLocation location;
         RandomizerConfig const& config = sWorldRandomizer->Config();
-        if (config.enable && sWorldRandomizer->PickStartLocation(player, location))
+        if (config.enable && sWorldRandomizer->PickStartLocation(player, location, startZone))
         {
             party.mapId = location.mapId;
             party.zoneId = location.zoneId;
@@ -322,13 +322,30 @@ public:
         return true;
     }
 
-    static bool HandleCreateCommand(ChatHandler* handler)
+    // .coop create [zone id]: the zone must be one of the leader's start zones (the web page's "Starts in" gives it)
+    static bool HandleCreateCommand(ChatHandler* handler, Optional<uint32> zoneId)
     {
         Player* player = handler->GetSession()->GetPlayer();
         if (!CheckAllowed(handler, player))
             return false;
 
-        std::string code = sCoop->Create(player);
+        if (zoneId && *zoneId)
+        {
+            std::vector<uint32> zones = sWorldRandomizer->StartZones(player);
+            if (!sWorldRandomizer->Config().enable ||
+                std::find(zones.begin(), zones.end(), *zoneId) == zones.end())
+            {
+                std::string list;
+                for (uint32 id : zones)
+                    if (RandomizerZone const* zone = sWorldRandomizer->FindZone(id))
+                        list += Acore::StringFormat("{}{} ({})", list.empty() ? "" : ", ", zone->name, id);
+                handler->SendErrorMessage("You can't start in zone {}. Your start zones: {}.", *zoneId,
+                    list.empty() ? "none" : list);
+                return false;
+            }
+        }
+
+        std::string code = sCoop->Create(player, zoneId ? *zoneId : 0);
         RandomizerConfig const& config = sWorldRandomizer->Config();
         handler->PSendSysMessage("|cffFF8000[Co-op]|r Your party code is |cffFFFF00{}|r. Share it: friends type "
             "|cffFFFF00.coop join {}|r to start here with you (up to {} players, level {} or lower).", code, code,

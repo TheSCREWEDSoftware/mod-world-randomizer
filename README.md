@@ -34,7 +34,10 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
 
 - **Talents earlier** (optional): `Randomizer.Talents.StartLevel` gives the first talent point before level 10
   (1 to 10). By default the usual total at max level is spread from there (71 at 80); the addon opens the talent
-  frame from that level.
+  frame from that level (from level 1 when achievements gave bonus talent points).
+- **Where you start**: `Randomizer.PlayerStart.PreferLowZones` picks a bracket 1 zone that was already low
+  level before the shuffle when there is one; `.coop create <zone id>` starts the party (or just you) in the zone
+  you choose, such as the one the roller page shows.
 
 - **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
   `.coop join <code>` and start in the same place, in the leader's group.

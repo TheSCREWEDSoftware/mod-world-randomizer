@@ -123,6 +123,7 @@ struct RandomizerConfig
     bool playerStart = true;
     bool playerStartSkipDK = true;
     bool playerStartFactionLock = true;
+    bool playerStartPreferLow = true; // zones that were already low level (their home bracket is bracket 1) first
 
     // Co-op: friends share a code and start together
     bool coopEnable = true;
@@ -188,7 +189,10 @@ public:
     Bracket const* GetDungeonBracket(uint32 mapId) const;
 
     // Players
-    bool PickStartLocation(Player* player, StartLocation& out) const;
+    // zoneId: start in that zone (it must be one of the player's start zones); 0 = pick one
+    bool PickStartLocation(Player* player, StartLocation& out, uint32 zoneId = 0) const;
+    // The zones PickStartLocation would choose from for this player (the preferred ones only)
+    std::vector<uint32> StartZones(Player* player) const;
     float GetXPRate() const;
 
     void StoreSeed(uint32 seed) const;

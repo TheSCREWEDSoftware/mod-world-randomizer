@@ -591,6 +591,20 @@ public:
                     player->SetTitle(title);
 
         player->InitTalentForLevel();
+
+        // Bonus talent points can come before level 10: tell the addon to open the talent frame
+        if (player->IsInWorld())
+            SendAddon(player, Acore::StringFormat("L\t{}", TalentFrameLevel(player)));
+    }
+
+    // The level the addon opens the talent frame from: 1 with bonus talent points from achievements, else
+    // Randomizer.Talents.StartLevel (10 = the client's own)
+    uint32 TalentFrameLevel(Player* player)
+    {
+        uint32 level = sWorldRandomizer->Config().talentStartLevel;
+        if (enable && Account(player).perks.bonusTalents)
+            level = 1;
+        return level;
     }
 
     void ApplyAura(Player* player, uint32 spell, float amount)
@@ -835,7 +849,7 @@ public:
 
         // The level of the first talent point, so the addon can open the talent frame before level 10
         if (msg.compare(prefix.size(), 3, "DEF") == 0)
-            SendAddon(player, Acore::StringFormat("L\t{}", uint32(sWorldRandomizer->Config().talentStartLevel)));
+            SendAddon(player, Acore::StringFormat("L\t{}", TalentFrameLevel(player)));
 
         if (!enable)
         {

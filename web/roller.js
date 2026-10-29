@@ -721,7 +721,10 @@
     var team = RACES[p.roll.race].faction === 'alliance' ? 0 : 1;
     var own = world.zones.filter(function (z) { return z.bracket === world.lowest && z.territory === team; });
     var contested = world.zones.filter(function (z) { return z.bracket === world.lowest && z.territory === 2; });
-    return { zones: own.length ? own : contested, own: own.length > 0, world: world };
+    var zones = own.length ? own : contested;
+    // Like Randomizer.PlayerStart.PreferLowZones: zones that were low level before the shuffle come first
+    var low = zones.filter(function (z) { return z.home === world.lowest; });
+    return { zones: zones, preferred: low.length ? low : zones, own: own.length > 0, world: world };
   }
 
   // Keep each roll's start zone valid for the current seed (no reroll counted)
@@ -731,7 +734,7 @@
       var start = startFor(i);
       if (!start || !start.zones.length) { p.roll.zone = 0; return; }
       var ids = start.zones.map(function (z) { return z.id; });
-      if (ids.indexOf(p.roll.zone) < 0) p.roll.zone = pickOne(ids);
+      if (ids.indexOf(p.roll.zone) < 0) p.roll.zone = pickOne(start.preferred.map(function (z) { return z.id; }));
     });
   }
 
@@ -1321,13 +1324,15 @@
       return '<div class="pstart muted">No bracket 1 zone fits this faction with this seed; the server falls back ' +
         'to the normal start.</div>';
     }
-    var all = start.zones.map(function (z) { return z.name; }).join(', ');
+    var all = start.zones.map(function (z) { return z.name + ' (' + z.id + ')'; }).join(', ');
+    var auto = start.preferred.map(function (z) { return z.name; }).join(', ');
     return '<div class="pstart">Starts in <b data-tip="' + esc('Bracket 1 zones: ' + all) + '">' +
       esc(zoneName(r.zone)) + '</b>' + (start.own ? '' : ' <span class="muted">(contested)</span>') +
       (locked(p) || start.zones.length < 2 ? '' :
         ' <button class="reroll" data-act="reroll" data-cat="zone" data-i="' + index +
         '" data-tip="Reroll start zone (' + p.counts.zone + ' so far)">&#x21bb; ' + p.counts.zone + '</button>') +
-      '<span class="muted small"> &middot; in game the server picks a graveyard in one of: ' + esc(all) + '</span>' +
+      '<div class="small">To start exactly there, at level 1 type <code>.coop create ' + r.zone + '</code> ' +
+      '(alone too). <span class="muted">Otherwise the server picks one of: ' + esc(auto) + '.</span></div>' +
       '</div>';
   }
 

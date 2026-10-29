@@ -234,6 +234,7 @@ void WorldRandomizerMgr::LoadConfig()
     c.playerStart = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.Enable", true);
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
     c.playerStartFactionLock = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.FactionLock", true);
+    c.playerStartPreferLow = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.PreferLowZones", true);
 
     c.coopEnable = sConfigMgr->GetOption<bool>("Randomizer.Coop.Enable", true);
     c.coopMaxSize = std::max<uint8>(2, sConfigMgr->GetOption<uint8>("Randomizer.Coop.MaxSize", 5));
@@ -967,45 +968,79 @@ void WorldRandomizerMgr::LoadStartLocations()
     } while (result->NextRow());
 }
 
-bool WorldRandomizerMgr::PickStartLocation(Player* player, StartLocation& out) const
+namespace
 {
-    TeamId team = player->GetTeamId();
-
-    auto usable = [team](StartLocation const& location)
+    // The start points a player may get: own faction zones, then contested ones, then (no faction lock) anything.
+    // With PreferLowZones, zones that were low level before the shuffle (Azuremyst, not a squeezed Bloodmyst) come
+    // first inside each of those.
+    std::vector<StartLocation const*> StartCandidates(std::vector<StartLocation> const& locations, Player* player,
+        RandomizerConfig const& config, uint8 lowest)
     {
-        return location.team == TEAM_NEUTRAL || location.team == team;
-    };
+        TeamId team = player->GetTeamId();
+        std::vector<StartLocation const*> tiers[6];
+        for (StartLocation const& location : locations)
+        {
+            if (location.team != TEAM_NEUTRAL && location.team != team)
+                continue;
 
-    // 1. Zones of the player's own faction, 2. contested zones, 3. anything in bracket 1
-    std::vector<StartLocation const*> tiers[3];
-    for (StartLocation const& location : _startLocations)
-    {
-        if (!usable(location))
-            continue;
+            RandomizerZone const* zone = sWorldRandomizer->FindZone(location.zoneId);
+            if (!zone)
+                continue;
 
-        RandomizerZone const* zone = FindZone(location.zoneId);
-        if (!zone)
-            continue;
+            uint8 tier = zone->territory == uint8(team) ? 0 : (zone->territory == 2 ? 1 : 2);
+            bool low = config.playerStartPreferLow && zone->homeBracket == lowest;
+            tiers[tier * 2 + (low ? 0 : 1)].push_back(&location);
+        }
 
-        if (zone->territory == uint8(team))
-            tiers[0].push_back(&location);
-        else if (zone->territory == 2)
-            tiers[1].push_back(&location);
-        else
-            tiers[2].push_back(&location);
+        uint8 last = config.playerStartFactionLock ? 3 : 5;
+        for (uint8 tier = 0; tier <= last; ++tier)
+            if (!tiers[tier].empty())
+                return tiers[tier];
+        return {};
     }
+}
 
-    uint8 lastTier = _config.playerStartFactionLock ? 1 : 2;
-    for (uint8 tier = 0; tier <= lastTier; ++tier)
+bool WorldRandomizerMgr::PickStartLocation(Player* player, StartLocation& out, uint32 zoneId) const
+{
+    uint8 lowest = 0;
+    for (std::size_t b = 1; b < _config.brackets.size(); ++b)
+        if (_config.brackets[b].levelMin < _config.brackets[lowest].levelMin)
+            lowest = uint8(b);
+
+    std::vector<StartLocation const*> candidates;
+    if (zoneId)
     {
-        if (tiers[tier].empty())
-            continue;
-
-        out = *Acore::Containers::SelectRandomContainerElement(tiers[tier]);
-        return true;
+        // A chosen zone (.coop create <zone>): any start point the player may use there, preferred or not
+        RandomizerConfig relaxed = _config;
+        relaxed.playerStartPreferLow = false;
+        for (StartLocation const* location : StartCandidates(_startLocations, player, relaxed, lowest))
+            if (location->zoneId == zoneId)
+                candidates.push_back(location);
     }
+    else
+        candidates = StartCandidates(_startLocations, player, _config, lowest);
 
-    return false;
+    if (candidates.empty())
+        return false;
+
+    out = *Acore::Containers::SelectRandomContainerElement(candidates);
+    return true;
+}
+
+std::vector<uint32> WorldRandomizerMgr::StartZones(Player* player) const
+{
+    uint8 lowest = 0;
+    for (std::size_t b = 1; b < _config.brackets.size(); ++b)
+        if (_config.brackets[b].levelMin < _config.brackets[lowest].levelMin)
+            lowest = uint8(b);
+
+    RandomizerConfig relaxed = _config;
+    relaxed.playerStartPreferLow = false;
+    std::vector<uint32> zones;
+    for (StartLocation const* location : StartCandidates(_startLocations, player, relaxed, lowest))
+        if (std::find(zones.begin(), zones.end(), location->zoneId) == zones.end())
+            zones.push_back(location->zoneId);
+    return zones;
 }
 
 float WorldRandomizerMgr::GetXPRate() const
