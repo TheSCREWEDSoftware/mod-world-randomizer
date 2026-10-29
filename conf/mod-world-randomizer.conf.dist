@@ -20,6 +20,7 @@ Randomizer.Enable = 1
 #    Randomizer.Announce
 #        Description: On login, tell the player this server runs the module, with a line for each feature
 #                     that is on (world shuffle and seed, stats era and XP rate, hardcore, co-op).
+#                     Never while Randomizer.Enable = 0.
 #        Default:     1 - enabled
 #                     0 - disabled
 
@@ -141,6 +142,27 @@ Randomizer.Creatures.ShiftKeptLevels = 1
 #        Default:     ""
 
 Randomizer.Creatures.ExcludeEntries = ""
+
+#
+#    Randomizer.Quests.Shift
+#        Description: Quests of a zone that moved to another bracket move with its creatures: their level (so the
+#                     XP, the colour in the quest log and the max level money follow) and their level requirement.
+#                     Elwynn Forest in 41-50: its quests become level 41-50 and need level 41 or so. Class,
+#                     profession and holiday quests keep their levels. Changed in memory only, for everyone.
+#                     Players should delete the client's Cache folder after a new seed, or the quest log may show
+#                     the old levels until the client asks again.
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Quests.Shift = 1
+
+#
+#    Randomizer.Quests.ShiftMoney
+#        Description: With Quests.Shift, reward money moves by as much as the quest XP does.
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Quests.ShiftMoney = 1
 
 #
 #    Randomizer.Creatures.ComputeMissingZones
@@ -291,6 +313,7 @@ Randomizer.Hardcore.CountPvPDeaths = 1
 #
 #    Randomizer.Hardcore.Announce
 #        Description: Tell the whole server when someone starts a hardcore run, falls, or is restored.
+#                     Never while Randomizer.Enable = 0.
 #        Default:     1
 
 Randomizer.Hardcore.Announce = 1
@@ -322,6 +345,7 @@ Randomizer.Achievements.Expansion = 0
 #
 #    Randomizer.Achievements.Announce
 #        Description: Tell the player when an achievement is done, with its rewards, and the count on login.
+#                     Never while Randomizer.Enable or Randomizer.Achievements.Enable is 0.
 #        Default:     1
 
 Randomizer.Achievements.Announce = 1

@@ -14,6 +14,7 @@
 #include "Map.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
+#include "QuestDef.h"
 #include "Player.h"
 #include "RaceMgr.h"
 #include "Random.h"
@@ -226,6 +227,9 @@ void WorldRandomizerMgr::LoadConfig()
         sConfigMgr->GetOption<bool>("DynamicScaling.Instance.Enable", true, false) &&
         sConfigMgr->GetOption<bool>("DynamicScaling.Collective.WorldRandomizer", false, false);
 
+    c.shiftQuests = sConfigMgr->GetOption<bool>("Randomizer.Quests.Shift", true);
+    c.shiftQuestMoney = sConfigMgr->GetOption<bool>("Randomizer.Quests.ShiftMoney", true);
+
     c.playerStart = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.Enable", true);
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
     c.playerStartFactionLock = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.FactionLock", true);
@@ -253,6 +257,8 @@ void WorldRandomizerMgr::LoadConfig()
     if (!c.moduleEnable)
     {
         c.enable = false;
+        c.announce = false;
+        c.hardcoreAnnounce = false;
         c.hardcoreMode = 0;
         c.era = StatEra::Unchanged;
         c.coopEnable = false;
@@ -298,6 +304,9 @@ void WorldRandomizerMgr::Initialize()
     if (_config.replaceCreatures || _config.shiftKeptLevels)
         ReplaceCreatures();
 
+    if (_config.shiftQuests)
+        ShiftQuests();
+
     if (_config.dungeonMode || _config.collective)
         ComputeDungeonShifts();
 
@@ -307,8 +316,9 @@ void WorldRandomizerMgr::Initialize()
         LoadStartLocations();
 
     LOG_INFO("module", "mod-world-randomizer: seed {}, {} zones in {} brackets, {} creatures replaced, {} kept and "
-        "level shifted, {} dungeons {}, {} start points.", _seed, _zones.size(), _config.brackets.size(),
-        _replaced, _spawnZone.size(), _config.collective ? _dungeonZone.size() : _dungeonShift.size(),
+        "level shifted, {} quests shifted, {} dungeons {}, {} start points.", _seed, _zones.size(),
+        _config.brackets.size(), _replaced, _spawnZone.size(), _questsShifted,
+        _config.collective ? _dungeonZone.size() : _dungeonShift.size(),
         _config.collective ? "handed to mod-dynamic-scaling" :
             (_config.dungeonMode == 2 ? "scaling inside their bracket" : "shifted"), _startLocations.size());
 }
@@ -816,6 +826,72 @@ bool WorldRandomizerMgr::AdjustLevel(Map* map, ObjectGuid::LowType spawnId, uint
     Bracket const& to = _config.brackets[zone.bracket];
     level = RemapLevel(level, zone.levelMin, zone.levelMax, to.levelMin, to.levelMax);
     return true;
+}
+
+namespace
+{
+    // Quest's level fields are protected; member pointers taken through a derived class are the legal way in
+    struct QuestFieldAccess : Quest
+    {
+        static constexpr int32 Quest::* Level = &QuestFieldAccess::Level;
+        static constexpr uint32 Quest::* MinLevel = &QuestFieldAccess::MinLevel;
+        static constexpr int32 Quest::* RewardMoney = &QuestFieldAccess::RewardMoney;
+    };
+}
+
+// Quests of a zone that moved to another bracket move with its creatures: the quest level (so the XP, the reward
+// money at max level and the colour in the quest log follow), the level requirement and, optionally, the reward
+// money. Changed in memory only, the same for everyone; a restart with World.Enable = 0 puts them back.
+void WorldRandomizerMgr::ShiftQuests()
+{
+    _questsShifted = 0;
+    for (auto const& [questId, quest] : sObjectMgr->GetQuestTemplates())
+    {
+        if (quest->GetZoneOrSort() <= 0)
+            continue; // class, profession and holiday quests (sorts) keep their levels
+
+        uint32 zoneId = uint32(quest->GetZoneOrSort());
+        RandomizerZone const* zone = FindZone(zoneId);
+        if (!zone)
+            if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(zoneId))
+                if (area->zone)
+                    zone = FindZone(area->zone);
+
+        if (!zone || zone->bracket == zone->homeBracket)
+            continue;
+
+        Bracket const& to = _config.brackets[zone->bracket];
+        int32 oldLevel = quest->GetQuestLevel();
+        int32 newLevel = oldLevel;
+        if (oldLevel > 0) // -1 = the player's own level
+        {
+            newLevel = RemapLevel(uint8(std::min<int32>(oldLevel, MAX_LEVEL)), zone->levelMin, zone->levelMax,
+                to.levelMin, to.levelMax);
+            quest->*QuestFieldAccess::Level = newLevel;
+        }
+
+        if (quest->GetMinLevel() > 0)
+        {
+            uint32 minLevel = RemapLevel(uint8(std::min<uint32>(quest->GetMinLevel(), MAX_LEVEL)), zone->levelMin,
+                zone->levelMax, to.levelMin, to.levelMax);
+            if (newLevel > 0)
+                minLevel = std::min<uint32>(minLevel, uint32(newLevel));
+            quest->*QuestFieldAccess::MinLevel = minLevel;
+        }
+
+        // Reward money grows with the level about as quest XP does, so it moves by the same ratio
+        if (_config.shiftQuestMoney && oldLevel > 0 && newLevel != oldLevel && quest->GetRewOrReqMoney(0) > 0)
+        {
+            uint32 xpId = std::min<uint32>(quest->GetXPId(), 9);
+            QuestXPEntry const* from = sQuestXPStore.LookupEntry(oldLevel);
+            QuestXPEntry const* toXP = sQuestXPStore.LookupEntry(newLevel);
+            if (from && toXP && from->Exp[xpId] > 0)
+                quest->*QuestFieldAccess::RewardMoney = std::max<int32>(1, int32(int64(quest->*QuestFieldAccess::
+                    RewardMoney) * toXP->Exp[xpId] / from->Exp[xpId]));
+        }
+
+        ++_questsShifted;
+    }
 }
 
 void WorldRandomizerMgr::PublishDungeonBrackets()

@@ -193,7 +193,7 @@ public:
     {
         enable = sWorldRandomizer->Config().moduleEnable &&
             sConfigMgr->GetOption<bool>("Randomizer.Achievements.Enable", true);
-        announce = sConfigMgr->GetOption<bool>("Randomizer.Achievements.Announce", true);
+        announce = enable && sConfigMgr->GetOption<bool>("Randomizer.Achievements.Announce", true);
         baseLevelCap = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.BaseLevelCap", 0);
         deathMinLevel = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.DeathMinLevel", 10);
         healthRegenSpell = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.HealthRegenSpell", 150110);

@@ -11,6 +11,11 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   by level and split into land / water and normal / elite. All spawns of one creature in a zone become the
   same random creature, so packs stay packs.
 - **Kept creatures** (quest kill targets, spawns with their own scripts) move their level into the new bracket.
+- **Quests** of a moved zone move with it (`Randomizer.Quests.Shift`): their level, so the XP and the colour in the
+  quest log follow, their level requirement and their reward money. Elwynn Forest in 41-50 has level 41-50 quests
+  that need level 41 or so. Class, profession and holiday quests keep their levels. This is the same for every
+  player, so it changes the quests in memory at startup rather than through the core's quest level hook (that hook
+  is per player, which mod-dynamic-scaling needs and this module doesn't).
 - **Dungeons** follow the bracket their entrance zone landed in. By default (`Randomizer.Dungeons.Mode = 2`) their
   creatures scale to the group's level but stay inside that bracket: Ragefire Chasm in a 31-40 bracket scales
   between 31 and 40, bosses still above their trash. This works on its own; with mod-dynamic-scaling installed and
@@ -197,7 +202,9 @@ Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach prof
 `/randach` opens a window with the categories, each achievement's icon, rewards, description and progress bar, and
 buttons for each party / raid member to see their account's achievements and this run's stats. It talks to the
 server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
-nothing is shown in chat. `/randach <name>` opens a group member directly.
+nothing is shown in chat. `/randach <name>` opens a group member directly. If the server doesn't answer within
+10 seconds of logging in (no module, `Randomizer.Enable = 0` or achievements off), the addon turns itself off until
+the next login.
 
 ## About the stats eras
 
@@ -237,7 +244,11 @@ back to their accounts.
 
 ## Known limits
 
-- Quests keep their own levels and rewards; only their kill targets move levels.
+- Shifted quests are changed in memory: a core `.reload quest_template` puts the original levels back until the
+  next restart. After a new seed, players should delete the client's `Cache` folder, or the quest log may show the
+  old levels until the client asks the server again.
+- Quests count by their zone (`ZoneOrSort`): a quest given in one zone but sorted under another moves with the
+  zone it is sorted under; dungeon quests keep their levels.
 - Replaced creatures keep the spawn's waypoints, mounts and auras from `creature_addon`.
 - Dungeon trash and bosses keep their entries (boss scripts depend on them); only their levels move.
 - Without mod-dynamic-scaling, dungeon levels are picked when creatures spawn, from the players inside at that

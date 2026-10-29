@@ -1,6 +1,8 @@
 -- Randomizer Achievements (WoW 3.3.5)
 -- Talks to mod-world-randomizer with addon whispers to yourself (prefix RANDACH):
 --   asks for the achievement list once, then for the progress of you or a party / raid member.
+-- If the server doesn't answer within 10 seconds of logging in (no module, or achievements are off), the addon
+-- turns itself off until the next login.
 -- /randach            show or hide the window
 -- /randach <name>     show a group member's achievements
 
@@ -19,6 +21,8 @@ local selectedCategory = 0
 local viewing = UnitName("player")
 local defsLoaded = false
 local expansion = 3      -- the server's content: 1 Vanilla, 2 TBC, 3 Wrath
+local available = nil    -- nil: waiting for the server, true: it answered, false: no module (off until next login)
+local replyTimeout
 local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
 
 -- Made for the server's current content?
@@ -359,9 +363,16 @@ end
 
 refresh:SetScript("OnClick", function() Request(viewing) end)
 
+local Disable
+
+local function Print(text)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffFFD100[Randomizer Achievements]|r " .. text)
+end
+
 local function OnMessage(message)
     local parts = Split(message, "\t")
     local kind = parts[1]
+    available = true
 
     if kind == "C" then
         local id = tonumber(parts[2])
@@ -407,8 +418,9 @@ local function OnMessage(message)
             Redraw()
         end
     elseif kind == "X" then
-        DEFAULT_CHAT_FRAME:AddMessage("|cffFFD100[Randomizer Achievements]|r " .. (parts[2] or ""))
+        Print(parts[2] or "")
         summary:SetText(parts[2] or "")
+        if parts[2] and parts[2]:find("off on this server") then Disable() end
     end
 end
 
@@ -417,6 +429,16 @@ events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("CHAT_MSG_ADDON")
 events:RegisterEvent("PARTY_MEMBERS_CHANGED")
 events:RegisterEvent("RAID_ROSTER_UPDATE")
+
+-- No module on this server (or achievements are off): stay quiet until the next login
+Disable = function()
+    available = false
+    replyTimeout = nil
+    frame:Hide()
+    events:UnregisterEvent("CHAT_MSG_ADDON")
+    events:UnregisterEvent("PARTY_MEMBERS_CHANGED")
+    events:UnregisterEvent("RAID_ROSTER_UPDATE")
+end
 
 local loginDelay
 events:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
@@ -433,15 +455,29 @@ events:SetScript("OnEvent", function(self, event, prefix, message, channel, send
 end)
 
 events:SetScript("OnUpdate", function(self, elapsed)
-    if not loginDelay then return end
-    loginDelay = loginDelay - elapsed
-    if loginDelay <= 0 then
-        loginDelay = nil
-        Send("DEF")
+    if loginDelay then
+        loginDelay = loginDelay - elapsed
+        if loginDelay <= 0 then
+            loginDelay = nil
+            replyTimeout = 10
+            Send("DEF")
+        end
+    elseif replyTimeout then
+        if available then
+            replyTimeout = nil
+            return
+        end
+        replyTimeout = replyTimeout - elapsed
+        if replyTimeout <= 0 then
+            Disable()
+            Print("This server doesn't run the World Randomizer achievements, so the addon is off until your next "
+                .. "login.")
+        end
     end
 end)
 
 frame:SetScript("OnShow", function()
+    if available == false then frame:Hide() return end
     if defsLoaded then Request(viewing) else Send("DEF") end
     Redraw()
 end)
@@ -449,6 +485,13 @@ end)
 SLASH_RANDACH1 = "/randach"
 SlashCmdList["RANDACH"] = function(arg)
     arg = arg and arg:gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if available == false then
+        Print("Not available: this server doesn't run the World Randomizer achievements.")
+        return
+    elseif available == nil then
+        Print("Still waiting for the server to answer, try again in a few seconds.")
+        return
+    end
     if arg ~= "" then
         viewing = arg:sub(1, 1):upper() .. arg:sub(2):lower()
         frame:Show()

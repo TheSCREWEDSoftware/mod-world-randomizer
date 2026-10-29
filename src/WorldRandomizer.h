@@ -107,6 +107,8 @@ struct RandomizerConfig
     bool keepQuestCreatures = true;
     bool shiftKeptLevels = true;
     bool computeMissingZones = true;
+    bool shiftQuests = true;      // quests of moved zones follow their creatures (level, level requirement, XP)
+    bool shiftQuestMoney = true;  // and their reward money
     std::vector<uint32> excludeEntries;
 
     uint8 dungeonMode = 2; // 0 unchanged, 1 shift by as much as the entrance zone moved, 2 scale to the group
@@ -189,6 +191,7 @@ private:
     uint32 GroupKey(RandomizerZone const& zone) const;
     void LoadSpawnZones(std::unordered_map<ObjectGuid::LowType, uint32>& out);
     void ReplaceCreatures();
+    void ShiftQuests();
     void ComputeDungeonShifts();
     void PublishDungeonBrackets();
     void LoadStartLocations();
@@ -205,6 +208,7 @@ private:
     std::unordered_map<uint32, uint8> _dungeonBase;             // map -> level the dungeon was made for
     std::vector<StartLocation> _startLocations;
     std::size_t _replaced = 0;
+    std::size_t _questsShifted = 0;
 
     bool _statsApplied = false;
 };
