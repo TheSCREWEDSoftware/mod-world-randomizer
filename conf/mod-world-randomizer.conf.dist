@@ -344,7 +344,7 @@ Randomizer.Achievements.DeathMinLevel = 10
 #
 #    Randomizer.Achievements.HealthRegenSpell
 #    Randomizer.Achievements.ManaRegenSpell
-#        Description: Server side auras that carry the regen rewards (see world_randomizer_05_achievement_tables.sql).
+#        Description: Server side auras that carry the regen rewards (see 05_world_randomizer_achievement_tables.sql).
 #        Default:     150110 / 150111
 
 Randomizer.Achievements.HealthRegenSpell = 150110

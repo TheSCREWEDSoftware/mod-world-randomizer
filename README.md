@@ -213,15 +213,15 @@ Durotar, the Stockade Elwynn Forest, the Violet Hold Crystalsong Forest).
 Turn either switch off and they ignore each other; then don't run both on the same creatures (turn off
 `DynamicScaling.Instance.LevelScaling.Enable` and the open world zone rows there).
 
-## Uninstall
+## Drop / remove / uninstall
 
-`data/sql/uninstall/` has a `world.sql` and a `characters.sql` that take the module back out: they drop its tables,
-remove its custom spells (and any saved auras of them) and its rows in `updates`, so a later reinstall starts clean.
-Replaced creatures, levels, player base stats, XP rates and start locations are only changed in memory (the core's
-`player_class_stats` / `player_race_stats` are never edited), so they are the core's again once the module is gone.
-Rewards already given (spells, titles, items, gold) stay on the characters. Soft deleted hardcore characters stay core
-deleted characters (`.character deleted restore`); `characters.sql` has a block, commented out, that gives them all back
-to their accounts.
+`data/sql/drop_remove_uninstall/` has a `world.sql` and a `characters.sql` that take the module back out: they drop its
+tables, remove its custom spells (and any saved auras of them) and its rows in `updates`, so a later reinstall starts
+clean. Replaced creatures, levels, player base stats, XP rates and start locations are only changed in memory (the
+core's `player_class_stats` / `player_race_stats` are never edited), so they are the core's again once the module is
+gone. Rewards already given (spells, titles, items, gold) stay on the characters. Soft deleted hardcore characters stay
+core deleted characters (`.character deleted restore`); `characters.sql` has a block, commented out, that gives them all
+back to their accounts.
 
 1. Take the module out of the build (move it out of `modules/`, or add it to `-DDISABLED_AC_MODULES`) and rebuild.
    With the module still built, the DB updater installs everything again on the next start.

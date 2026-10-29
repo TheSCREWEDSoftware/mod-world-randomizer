@@ -1,4 +1,4 @@
--- mod-world-randomizer uninstall, characters database. Read the notes in world.sql first.
+-- mod-world-randomizer drop / remove / uninstall, characters database. Read the notes in world.sql first.
 --
 -- What stays on the characters, because it is ordinary game data the core keeps by itself:
 --   - Achievement rewards already given: spells (riding, specializations), titles, starting gold and items.
@@ -35,4 +35,5 @@ DROP TABLE IF EXISTS `world_randomizer_ach_choice`;
 DROP TABLE IF EXISTS `world_randomizer_ach_skill`;
 
 -- Forget the applied file, so a later reinstall runs it again
-DELETE FROM `updates` WHERE `state` = 'MODULE' AND `name` = 'world_randomizer_characters.sql';
+DELETE FROM `updates` WHERE `state` = 'MODULE' AND `name` IN ('01_world_randomizer_characters.sql',
+    'world_randomizer_characters.sql');

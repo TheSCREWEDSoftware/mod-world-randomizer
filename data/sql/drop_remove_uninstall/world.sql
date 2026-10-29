@@ -1,4 +1,4 @@
--- mod-world-randomizer uninstall, world database.
+-- mod-world-randomizer drop / remove / uninstall, world database.
 -- Run it only after the module is out of the build (moved out of modules/ or in -DDISABLED_AC_MODULES) and the
 -- worldserver was rebuilt; otherwise the DB updater installs everything again on the next start.
 -- Everything else the module changes (replaced creatures, creature and dungeon levels, player base stats for the
@@ -22,6 +22,10 @@ DROP TABLE IF EXISTS `world_randomizer_achievement_reward`;
 DELETE FROM `spell_dbc` WHERE `ID` IN (150110, 150111);
 
 -- Forget the applied files, so a later reinstall runs them again
-DELETE FROM `updates` WHERE `state` = 'MODULE' AND `name` IN ('world_randomizer_01_tables.sql',
-    'world_randomizer_02_zones.sql', 'world_randomizer_03_player_stats.sql', 'world_randomizer_04_instances.sql',
-    'world_randomizer_05_achievement_tables.sql', 'world_randomizer_06_achievements.sql');
+DELETE FROM `updates` WHERE `state` = 'MODULE' AND `name` IN ('01_world_randomizer_tables.sql',
+    '02_world_randomizer_zones.sql', '03_world_randomizer_player_stats.sql', '04_world_randomizer_instances.sql',
+    '05_world_randomizer_achievement_tables.sql', '06_world_randomizer_achievements.sql',
+    -- the names before the files were numbered first
+    'world_randomizer_01_tables.sql', 'world_randomizer_02_zones.sql', 'world_randomizer_03_player_stats.sql',
+    'world_randomizer_04_instances.sql', 'world_randomizer_05_achievement_tables.sql',
+    'world_randomizer_06_achievements.sql');

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Builds data/sql/db-world/world_randomizer_06_achievements.sql: the achievement list (from the reference screenshots)
+Builds data/sql/db-world/06_world_randomizer_achievements.sql: the achievement list (from the reference screenshots)
 with icons, descriptions and rewards. Edit the lists below and run:  python tools/generate_achievements.py
 Criteria and reward numbers are explained in src/WorldRandomizerAchievements.h.
 """
@@ -170,5 +170,5 @@ out=["-- mod-world-randomizer: achievements and their rewards (account-wide; see
 "DELETE FROM `world_randomizer_achievement_reward` WHERE `achievement_id` BETWEEN 100 AND 5999;",
 "INSERT INTO `world_randomizer_achievement_reward` (`achievement_id`, `idx`, `type`, `value`, `arg`, `arg2`, `text`) VALUES",
 ",\n".join(f"({r[0]}, {r[1]}, {r[2]}, {r[3]}, {r[4]}, {r[5]}, {q(r[6])})" for r in rewards)+";"]
-open(Path(__file__).resolve().parent.parent / 'data/sql/db-world/world_randomizer_06_achievements.sql','w',encoding='utf-8').write("\n".join(out)+"\n")
+open(Path(__file__).resolve().parent.parent / 'data/sql/db-world/06_world_randomizer_achievements.sql','w',encoding='utf-8').write("\n".join(out)+"\n")
 print(len(rows),'achievements',sum(r[7] for r in rows),'enabled',len(rewards),'rewards', sum(1 for r in rewards if r[2]==0),'text-only')

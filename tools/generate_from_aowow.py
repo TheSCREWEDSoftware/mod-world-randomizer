@@ -5,7 +5,7 @@ Rebuild the randomizer's zone list from your aowow zone extract.
     python tools/generate_from_aowow.py <path to aowow/Stuff/zone-extract>
 
 Writes:
-  data/sql/db-world/world_randomizer_02_zones.sql   zones, original level ranges, territory, neighbours
+  data/sql/db-world/02_world_randomizer_zones.sql   zones, original level ranges, territory, neighbours
   web/zones.js                                      the same zones plus their map outlines, for web/map.html
 
 Neighbours (for Randomizer.Brackets.Adjacent) are zones whose outlines touch on the continent map; an island with
@@ -125,7 +125,7 @@ def main() -> None:
         "INSERT INTO `world_randomizer_zone_link` (`zone_id`, `neighbour_id`) VALUES",
         ",\n".join(f"({r['id']}, {n})" for r in rows for n in r["n"]) + ";",
     ]
-    (module / "data/sql/db-world/world_randomizer_02_zones.sql").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (module / "data/sql/db-world/02_world_randomizer_zones.sql").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # Outlines: every zone drawn on the four continent maps (cities too, drawn grey)
     outlines = {}
