@@ -67,7 +67,9 @@ Plain HTML + JavaScript, no build step.
   professions), and compatible professions (each player's two go together, or the party covers itself: Mining +
   Alchemy next to Herbalism + Jewelcrafting). Players can trade races, classes, specs (same class) and
   professions. Each player's code carries their roll, preferences and counts; several codes combine into one
-  party, and the party code carries everything, the world seed included. Hardcore mode locks the first roll.
+  party, and the party code carries everything, the world seed included. Codes are packed short (about 60
+  characters for one player, 100 for a party of five) so they fit in the game's chat; older codes still load and
+  "Paste an old code" converts them. Hardcore mode locks the first roll.
   Icons show their name on hover; "Show" switches to names.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.

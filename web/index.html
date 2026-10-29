@@ -17,6 +17,25 @@
 
 <main>
   <section class="panel">
+    <h2>Paste an old code</h2>
+    <p class="muted" style="margin-top:0">Codes from before the short format still load. Paste one here to load it
+      and get the same party (or player) as a short code that fits in the game's chat.</p>
+    <div class="controls">
+      <label class="field grow"><span>Old code</span>
+        <input type="text" id="convert-in" placeholder="WRP3.... / WRC3.... / an older party code">
+      </label>
+      <button class="quiet" id="convert-go">Convert</button>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <label class="field grow"><span>New code</span>
+        <input type="text" id="convert-out" readonly>
+      </label>
+      <button class="quiet" id="convert-copy">Copy</button>
+    </div>
+    <p id="convert-msg" class="muted" style="margin:8px 0 0"></p>
+  </section>
+
+  <section class="panel">
     <h2>Roll a character</h2>
     <div class="controls">
       <label class="field"><span>Era</span>
@@ -118,6 +137,7 @@
       </label>
       <button class="quiet" id="party-copy">Copy</button>
     </div>
+    <p id="party-code-size" class="muted small" style="margin:4px 0 0"></p>
     <div class="controls" style="margin-top:10px">
       <label class="field grow"><span>Codes to combine</span>
         <textarea id="load-codes" rows="3" placeholder="Paste codes here, one per line"></textarea>

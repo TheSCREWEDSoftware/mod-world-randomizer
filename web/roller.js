@@ -835,10 +835,232 @@
   }
 
   // ---- Codes ----
-  // Character code: WRC3.<base64url JSON>   Party code: WRP3.<base64url JSON>   (older party codes still load)
+  // WR4.<base64url bits>: packed to fit one chat line (255 characters) for a usual party. The JSON codes of
+  // earlier versions (WRC3. / WRP3. and the first page's) still load.
 
-  function toBase64(text) {
-    return btoa(unescape(encodeURIComponent(text))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  function BitWriter() { this.bits = []; }
+  BitWriter.prototype.put = function (value, count) {
+    for (var i = count - 1; i >= 0; i--) this.bits.push(Math.floor(value / Math.pow(2, i)) % 2);
+  };
+  BitWriter.prototype.flag = function (on) { this.bits.push(on ? 1 : 0); };
+  // Small numbers: 4 bits at a time, with a "more" bit
+  BitWriter.prototype.varint = function (value) {
+    value = Math.max(0, Math.floor(value));
+    do {
+      var chunk = value % 16;
+      value = Math.floor(value / 16);
+      this.put(chunk, 4);
+      this.flag(value > 0);
+    } while (value > 0);
+  };
+  BitWriter.prototype.text = function (str) {
+    var bytes = unescape(encodeURIComponent(str)).slice(0, 63);
+    this.put(bytes.length, 6);
+    for (var i = 0; i < bytes.length; i++) this.put(bytes.charCodeAt(i), 8);
+  };
+  BitWriter.prototype.toString = function () {
+    var binary = '';
+    for (var i = 0; i < this.bits.length; i += 8) {
+      var byte = 0;
+      for (var j = 0; j < 8; j++) byte = byte * 2 + (this.bits[i + j] || 0);
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+
+  function BitReader(text) {
+    var base64 = text.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) base64 += '=';
+    var binary = atob(base64);
+    this.bits = [];
+    for (var i = 0; i < binary.length; i++) {
+      var byte = binary.charCodeAt(i);
+      for (var j = 7; j >= 0; j--) this.bits.push((byte >> j) & 1);
+    }
+    this.pos = 0;
+  }
+  BitReader.prototype.get = function (count) {
+    var value = 0;
+    for (var i = 0; i < count; i++) {
+      if (this.pos >= this.bits.length) throw new Error('code too short');
+      value = value * 2 + this.bits[this.pos++];
+    }
+    return value;
+  };
+  BitReader.prototype.flag = function () { return this.get(1) === 1; };
+  BitReader.prototype.varint = function () {
+    var value = 0;
+    var scale = 1;
+    var more = true;
+    while (more) {
+      value += this.get(4) * scale;
+      scale *= 16;
+      more = this.flag();
+      if (scale > Math.pow(16, 8)) throw new Error('bad number');
+    }
+    return value;
+  };
+  BitReader.prototype.text = function () {
+    var length = this.get(6);
+    var bytes = '';
+    for (var i = 0; i < length; i++) bytes += String.fromCharCode(this.get(8));
+    return decodeURIComponent(escape(bytes));
+  };
+
+  function sameCategory(a, b) {
+    return a.mode === b.mode && JSON.stringify(a.allow) === JSON.stringify(b.allow) &&
+      JSON.stringify(a.weight) === JSON.stringify(b.weight) && (a.mode !== 'pick' || a.pick === b.pick);
+  }
+
+  function writeWorld(w) {
+    var map = worldSettings();
+    w.flag(!!map.seed);
+    if (!map.seed) return;
+    w.put(map.seed >>> 0, 32);
+    var brackets = R.parseBrackets(map.brackets || DEFAULT_BRACKETS);
+    var isDefault = brackets.map(function (b) { return b.min + '-' + b.max; }).join(',') === DEFAULT_BRACKETS;
+    w.flag(isDefault);
+    if (!isDefault) {
+      w.put(Math.min(brackets.length, 31), 5);
+      brackets.slice(0, 31).forEach(function (b) { w.put(b.min, 7); w.put(b.max, 7); });
+    }
+    w.put(map.scope || 0, 2);
+    w.flag(!!map.balanced);
+    w.flag(map.adjacent !== 0);
+    w.flag(map.factionStarts !== 0);
+  }
+
+  function readWorld(r) {
+    if (!r.flag()) return null;
+    var seed = r.get(32);
+    var brackets = DEFAULT_BRACKETS;
+    if (!r.flag()) {
+      var list = [];
+      for (var n = r.get(5); n > 0; n--) list.push(r.get(7) + '-' + r.get(7));
+      brackets = list.join(',');
+    }
+    return [seed, brackets, r.get(2), r.flag() ? 1 : 0, r.flag() ? 1 : 0, r.flag() ? 1 : 0];
+  }
+
+  function writePlayer(w, p, index) {
+    w.flag(p.name === 'Player ' + (index + 1));
+    if (p.name !== 'Player ' + (index + 1)) w.text(p.name);
+
+    var s = p.settings;
+    var d = defaultSettings();
+    var plain = s.gender === d.gender && s.rollSpec === d.rollSpec && s.rollProfs === d.rollProfs &&
+      s.profRule === d.profRule && CATS.every(function (cat) { return sameCategory(s.cats[cat], d.cats[cat]); });
+    w.flag(plain);
+    if (!plain) {
+      w.put(['random', 'm', 'f'].indexOf(s.gender), 2);
+      w.flag(s.rollSpec);
+      w.flag(s.rollProfs);
+      w.put(PROF_RULES.indexOf(s.profRule), 2);
+      CATS.forEach(function (cat) {
+        var c = s.cats[cat];
+        var same = sameCategory(c, d.cats[cat]);
+        w.flag(same);
+        if (same) return;
+        w.put(MODES.indexOf(c.mode), 2);
+        KEYS[cat].forEach(function (key) { w.flag(!!c.allow[key]); });
+        if (c.mode === 'pick') w.put(Math.max(0, KEYS[cat].indexOf(c.pick)), 5);
+        var weighted = KEYS[cat].some(function (key) { return Number(c.weight[key]) !== 10; });
+        w.flag(weighted);
+        if (weighted) KEYS[cat].forEach(function (key) { w.varint(Number(c.weight[key]) || 0); });
+      });
+    }
+
+    var r = p.roll;
+    w.flag(!!r);
+    if (r) {
+      w.put(r.race, 4);
+      w.put(r.cls, 4);
+      w.flag(r.gender === 'f');
+      w.put(r.spec >= 0 ? r.spec : 3, 2);
+      w.put(r.profs[0] >= 0 ? r.profs[0] : 15, 4);
+      w.put(r.profs[1] >= 0 ? r.profs[1] : 15, 4);
+      w.flag(!!r.zone);
+      if (r.zone) w.put(r.zone, 14);
+    }
+
+    COUNT_KEYS.concat('trade').forEach(function (key) {
+      w.flag(p.counts[key] > 0);
+      if (p.counts[key] > 0) w.varint(p.counts[key]);
+    });
+  }
+
+  function readPlayer(r, index) {
+    var p = newPlayer(index + 1);
+    if (!r.flag()) p.name = r.text().slice(0, 24) || p.name;
+
+    if (!r.flag()) {
+      var s = p.settings;
+      s.gender = ['random', 'm', 'f'][r.get(2)] || 'random';
+      s.rollSpec = r.flag();
+      s.rollProfs = r.flag();
+      s.profRule = PROF_RULES[r.get(2)] || 'any';
+      CATS.forEach(function (cat) {
+        if (r.flag()) return;
+        var c = s.cats[cat];
+        c.mode = MODES[r.get(2)];
+        KEYS[cat].forEach(function (key) { c.allow[key] = r.flag(); });
+        if (c.mode === 'pick') c.pick = KEYS[cat][r.get(5)] || '';
+        if (r.flag()) KEYS[cat].forEach(function (key) { c.weight[key] = Math.min(1000, r.varint()); });
+      });
+    }
+
+    if (r.flag()) {
+      var roll = { race: r.get(4), cls: r.get(4), gender: r.flag() ? 'f' : 'm', spec: r.get(2), profs: [r.get(4),
+        r.get(4)], zone: 0 };
+      if (roll.spec === 3) roll.spec = -1;
+      roll.profs = roll.profs.map(function (prof) { return PROFESSIONS[prof] ? prof : -1; });
+      if (r.flag()) roll.zone = r.get(14);
+      if (!RACES[roll.race] || !CLASSES[roll.cls] || COMBOS[roll.race].indexOf(roll.cls) < 0) {
+        throw new Error('bad roll');
+      }
+      p.roll = roll;
+    }
+
+    COUNT_KEYS.concat('trade').forEach(function (key) { p.counts[key] = r.flag() ? r.varint() : 0; });
+    return normalizePlayer(p, index + 1);
+  }
+
+  function packedCode(players, party) {
+    var w = new BitWriter();
+    w.flag(party);
+    w.put(ERAS.indexOf(state.era), 2);
+    w.flag(state.hardcore);
+    writeWorld(w);
+    if (party) {
+      var rules = state.party;
+      w.put(['same', 'free', 'different'].indexOf(rules.faction), 2);
+      w.flag(rules.dupRace);
+      w.flag(rules.dupClass);
+      w.flag(rules.dupSpec);
+      w.put(['yes', 'slot', 'no'].indexOf(rules.profDup), 2);
+      w.put(['off', 'player', 'party'].indexOf(rules.compat), 2);
+      w.put(players.length - 1, 6);
+    }
+    players.forEach(function (p) { writePlayer(w, p, party ? state.players.indexOf(p) : 0); });
+    return 'WR4.' + w.toString();
+  }
+
+  function readPackedCode(text) {
+    var r = new BitReader(text);
+    var party = r.flag();
+    var out = { era: ERAS[r.get(2)] || 'wrath', hardcore: r.flag(), rules: null, players: [] };
+    out.world = readWorld(r);
+    var count = 1;
+    if (party) {
+      out.rules = {
+        faction: ['same', 'free', 'different'][r.get(2)] || 'same', dupRace: r.flag(), dupClass: r.flag(),
+        dupSpec: r.flag(), profDup: ['yes', 'slot', 'no'][r.get(2)] || 'yes',
+        compat: ['off', 'player', 'party'][r.get(2)] || 'off'
+      };
+      count = r.get(6) + 1;
+    }
+    for (var i = 0; i < count; i++) out.players.push(readPlayer(r, i));
+    return out;
   }
 
   function fromBase64(text) {
@@ -860,17 +1082,6 @@
     return set;
   }
 
-  function encodeSettings(s) {
-    return [['random', 'm', 'f'].indexOf(s.gender), s.rollSpec ? 1 : 0, s.rollProfs ? 1 : 0,
-      PROF_RULES.indexOf(s.profRule), CATS.map(function (cat) {
-        var c = s.cats[cat];
-        var entry = [MODES.indexOf(c.mode), maskOf(cat, c.allow), KEYS[cat].indexOf(c.pick)];
-        var defaults = KEYS[cat].every(function (key) { return Number(c.weight[key]) === 10; });
-        if (!defaults) entry.push(KEYS[cat].map(function (key) { return Number(c.weight[key]) || 0; }));
-        return entry;
-      })];
-  }
-
   function decodeSettings(data) {
     var s = defaultSettings();
     s.gender = ['random', 'm', 'f'][data[0]] || 'random';
@@ -889,13 +1100,6 @@
     return s;
   }
 
-  function encodePlayer(p) {
-    var r = p.roll;
-    return [p.name, encodeSettings(p.settings),
-      r ? [r.race, r.cls, r.gender === 'f' ? 1 : 0, r.spec, r.profs[0], r.profs[1], r.zone || 0] : 0,
-      COUNT_KEYS.concat('trade').map(function (key) { return p.counts[key] || 0; })];
-  }
-
   function decodePlayer(data, number) {
     var p = newPlayer(number);
     p.name = String(data[0] || p.name).slice(0, 24);
@@ -909,18 +1113,6 @@
     return normalizePlayer(p, number);
   }
 
-  function encodeWorld() {
-    var map = worldSettings();
-    return [map.seed || 0, map.brackets || '', map.scope || 0, map.balanced ? 1 : 0,
-      map.adjacent === 0 ? 0 : 1, map.factionStarts === 0 ? 0 : 1];
-  }
-
-  function encodeRules() {
-    var r = state.party;
-    return [['same', 'free', 'different'].indexOf(r.faction), r.dupRace ? 1 : 0, r.dupClass ? 1 : 0, r.dupSpec ? 1 : 0,
-      ['yes', 'slot', 'no'].indexOf(r.profDup), ['off', 'player', 'party'].indexOf(r.compat)];
-  }
-
   function decodeRules(data) {
     return {
       faction: ['same', 'free', 'different'][data[0]] || 'same', dupRace: !!data[1], dupClass: !!data[2],
@@ -930,13 +1122,11 @@
   }
 
   function characterCode(p) {
-    return 'WRC3.' + toBase64(JSON.stringify([ERAS.indexOf(state.era), state.hardcore ? 1 : 0, encodeWorld(),
-      encodePlayer(p)]));
+    return packedCode([p], false);
   }
 
   function partyCode() {
-    return 'WRP3.' + toBase64(JSON.stringify([ERAS.indexOf(state.era), state.hardcore ? 1 : 0, encodeWorld(),
-      encodeRules(), state.players.map(encodePlayer)]));
+    return packedCode(state.players, true);
   }
 
   // The party codes of the previous page: allowed lists, faction, and rolls
@@ -959,6 +1149,7 @@
   function decodeCode(code) {
     code = code.trim();
     var data;
+    if (/^WR4\./.test(code)) return readPackedCode(code.slice(4));
     if (/^WR[CP]3\./.test(code)) {
       data = JSON.parse(fromBase64(code.slice(5)));
       if (code.charAt(2) === 'C') {
@@ -1312,7 +1503,11 @@
     renderWorld();
     renderTrade();
     renderPrefs();
-    $('party-code').value = partyCode();
+    var code = partyCode();
+    $('party-code').value = code;
+    $('party-code-size').innerHTML = code.length + ' characters' + (code.length > 255 ?
+      ' <span class="bad">(too long for one chat line: share the players\' own codes instead)</span>' :
+      ' (fits in one chat line)');
     save();
   }
 
@@ -1438,6 +1633,29 @@
   $('party-copy').addEventListener('click', function () {
     copyText($('party-code').value, function () { message('Party code copied.', 'good'); renderWorld(); });
   });
+  // An old (long) code in, the same party out as a short code
+  $('convert-go').addEventListener('click', function () {
+    var text = $('convert-in').value.trim();
+    if (!text) return;
+    var isParty = true;
+    try { isParty = decodeCode(text).rules !== null || decodeCode(text).players.length > 1; } catch (e) {
+      $('convert-out').value = '';
+      $('convert-msg').innerHTML = '<span class="bad">That is not a World Randomizer code.</span>';
+      return;
+    }
+    loadCodes(text, true);
+    render();
+    var code = isParty ? partyCode() : characterCode(state.players[0]);
+    $('convert-out').value = code;
+    $('convert-msg').innerHTML = '<span class="good">Converted and loaded: ' + text.length + ' &rarr; ' + code.length +
+      ' characters.</span>';
+  });
+  $('convert-copy').addEventListener('click', function () {
+    if ($('convert-out').value) copyText($('convert-out').value, function () {
+      $('convert-msg').innerHTML = '<span class="good">Copied.</span>';
+    });
+  });
+
   $('codes-add').addEventListener('click', function () { loadCodes($('load-codes').value, false); render(); });
   $('codes-replace').addEventListener('click', function () { loadCodes($('load-codes').value, true); render(); });
 
