@@ -7,7 +7,7 @@
 -- /randach <name>     show a group member's achievements
 
 local PREFIX = "RANDACH"
-local ROW_HEIGHT = 46
+local ROW_HEIGHT = 50
 local ROWS = 8
 
 RandomizerAchievementsDB = RandomizerAchievementsDB or {}
@@ -23,6 +23,8 @@ local defsLoaded = false
 local expansion = 3      -- the server's content: 1 Vanilla, 2 TBC, 3 Wrath
 local available = nil    -- nil: waiting for the server, true: it answered, false: no module (off until next login)
 local replyTimeout
+local minimapButton, optionsPanel
+local autoRefresh = 0    -- seconds until the open window asks the server again
 local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
 
 -- Made for the server's current content?
@@ -70,7 +72,7 @@ end
 -- ---------------------------------------------------------------- window
 
 local frame = CreateFrame("Frame", "RandomizerAchievementsFrame", UIParent)
-frame:SetWidth(720); frame:SetHeight(520)
+frame:SetWidth(720); frame:SetHeight(560)
 frame:SetPoint("CENTER")
 frame:SetMovable(true)
 frame:EnableMouse(true)
@@ -104,8 +106,8 @@ local function CategoryButton(index)
     if button then return button end
 
     button = CreateFrame("Button", nil, frame)
-    button:SetWidth(170); button:SetHeight(20)
-    button:SetPoint("TOPLEFT", 20, -58 - (index - 1) * 21)
+    button:SetWidth(170); button:SetHeight(18)
+    button:SetPoint("TOPLEFT", 20, -58 - (index - 1) * 19)
     button:SetNormalFontObject("GameFontNormalSmall")
     button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
     local text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -141,19 +143,20 @@ for i = 1, ROWS do
     row.check:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", 4, -4)
     row.check:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
 
+    -- One line each (cut with "..."); the tooltip has everything
     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 8, 0)
-    row.name:SetWidth(290)
+    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 8, 2)
+    row.name:SetWidth(290); row.name:SetHeight(16)
     row.name:SetJustifyH("LEFT")
 
     row.reward = row:CreateFontString(nil, "OVERLAY", "GameFontGreenSmall")
-    row.reward:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
-    row.reward:SetWidth(290)
+    row.reward:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, 0)
+    row.reward:SetWidth(290); row.reward:SetHeight(14)
     row.reward:SetJustifyH("LEFT")
 
     row.desc = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    row.desc:SetPoint("TOPLEFT", row.reward, "BOTTOMLEFT", 0, -1)
-    row.desc:SetWidth(290)
+    row.desc:SetPoint("TOPLEFT", row.reward, "BOTTOMLEFT", 0, 0)
+    row.desc:SetWidth(290); row.desc:SetHeight(14)
     row.desc:SetJustifyH("LEFT")
 
     row.bar = CreateFrame("StatusBar", nil, row)
@@ -203,7 +206,7 @@ refresh:SetPoint("BOTTOMRIGHT", -20, 18)
 refresh:SetText("Refresh")
 
 local whoLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-whoLabel:SetPoint("BOTTOMLEFT", 22, 24)
+whoLabel:SetPoint("BOTTOMLEFT", 22, 23)
 whoLabel:SetText("Show:")
 
 local function GroupMembers()
@@ -255,7 +258,6 @@ local function UpdateRows()
             if done then row.check:Show() else row.check:Hide() end
             local tag = ""
             if def.exp and def.exp ~= 0 then tag = " |cff8888ff[" .. ExpansionText(def.exp) .. "]|r" end
-            if #Versions(id) > 0 then tag = tag .. " |cff999999(+" .. #Versions(id) .. " versions)|r" end
             row.name:SetText(def.name .. tag)
             row.id = id
             if done then row.name:SetTextColor(1, 0.82, 0) else row.name:SetTextColor(0.9, 0.9, 0.9) end
@@ -319,7 +321,7 @@ local function UpdateMembers()
         if not button then
             button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
             button:SetWidth(90); button:SetHeight(22)
-            button:SetPoint("BOTTOMLEFT", 60 + (index - 1) * 92, 18)
+            button:SetPoint("BOTTOMLEFT", 62 + (index - 1) * 92, 18)
             memberButtons[index] = button
         end
         button:SetText(index == 1 and "Me" or name)
@@ -442,6 +444,7 @@ Disable = function()
     available = false
     replyTimeout = nil
     frame:Hide()
+    if minimapButton then minimapButton:Hide() end
     events:UnregisterEvent("CHAT_MSG_ADDON")
     events:UnregisterEvent("PARTY_MEMBERS_CHANGED")
     events:UnregisterEvent("RAID_ROSTER_UPDATE")
@@ -462,6 +465,15 @@ events:SetScript("OnEvent", function(self, event, prefix, message, channel, send
 end)
 
 events:SetScript("OnUpdate", function(self, elapsed)
+    -- Progress changes while you play: the open window asks again every few seconds
+    if frame:IsShown() and available then
+        autoRefresh = autoRefresh - elapsed
+        if autoRefresh <= 0 then
+            autoRefresh = 5
+            Request(viewing)
+        end
+    end
+
     if loginDelay then
         loginDelay = loginDelay - elapsed
         if loginDelay <= 0 then
@@ -485,6 +497,7 @@ end)
 
 frame:SetScript("OnShow", function()
     if available == false then frame:Hide() return end
+    autoRefresh = 5
     if defsLoaded then Request(viewing) else Send("DEF") end
     Redraw()
 end)
@@ -510,3 +523,141 @@ SlashCmdList["RANDACH"] = function(arg)
         frame:Show()
     end
 end
+
+local UI_NAME = "RandomizerAchievements"
+local UI_TITLE = "Randomizer Achievements"
+local UI_ICON = "Interface\\Icons\\Achievement_General"
+local UI_DEFAULT_ANGLE = 200
+local UI_CLICK_TEXT = "open the achievements"
+local UI_HELP = "Account-wide achievements of mod-world-randomizer, with their rewards, for you and your group.\n\n" ..
+    "/randach - show or hide the window\n/randach <name> - a group member's achievements\n.rach - your rewards " ..
+    "in chat\n\nThe window updates by itself every few seconds while it is open."
+local function UI_DB()
+    RandomizerAchievementsDB = RandomizerAchievementsDB or {}
+    return RandomizerAchievementsDB
+end
+local function UI_STATUS()
+    if available then return "|cff4CFF00Connected:|r the server runs the World Randomizer achievements." end
+    if available == false then
+        return "|cffFF6060Not available:|r this server doesn't run the World Randomizer achievements (off until " ..
+            "your next login)."
+    end
+    return "Waiting for the server to answer..."
+end
+local function UI_TOGGLE() SlashCmdList["RANDACH"]("") end
+
+-- ---------------------------------------------------------------- minimap button and Interface > AddOns panel
+
+local function PlaceMinimapButton()
+    local angle = math.rad(UI_DB().minimapAngle or UI_DEFAULT_ANGLE)
+    minimapButton:ClearAllPoints()
+    minimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * 80, math.sin(angle) * 80)
+end
+
+local function UpdateMinimapButton()
+    if not minimapButton then return end
+    if available == false or UI_DB().hideMinimap then minimapButton:Hide() else minimapButton:Show() end
+end
+
+local function CreateMinimapButton()
+    minimapButton = CreateFrame("Button", UI_NAME .. "MinimapButton", Minimap)
+    minimapButton:SetWidth(31); minimapButton:SetHeight(31)
+    minimapButton:SetFrameStrata("MEDIUM")
+    minimapButton:SetFrameLevel(8)
+    minimapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    minimapButton:RegisterForDrag("LeftButton")
+    minimapButton:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+
+    local background = minimapButton:CreateTexture(nil, "BACKGROUND")
+    background:SetWidth(20); background:SetHeight(20)
+    background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+    background:SetPoint("TOPLEFT", 7, -5)
+    local icon = minimapButton:CreateTexture(nil, "ARTWORK")
+    icon:SetWidth(17); icon:SetHeight(17)
+    icon:SetTexture(UI_ICON)
+    icon:SetPoint("TOPLEFT", 7, -6)
+    local border = minimapButton:CreateTexture(nil, "OVERLAY")
+    border:SetWidth(53); border:SetHeight(53)
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    border:SetPoint("TOPLEFT")
+
+    -- Drag it around the minimap
+    minimapButton:SetScript("OnDragStart", function(self)
+        self:SetScript("OnUpdate", function()
+            local mx, my = Minimap:GetCenter()
+            local x, y = GetCursorPosition()
+            local scale = Minimap:GetEffectiveScale()
+            UI_DB().minimapAngle = math.deg(math.atan2(y / scale - my, x / scale - mx))
+            PlaceMinimapButton()
+        end)
+    end)
+    minimapButton:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
+    minimapButton:SetScript("OnClick", function(self, button)
+        if button == "RightButton" then
+            InterfaceOptionsFrame_OpenToCategory(optionsPanel)
+        else
+            UI_TOGGLE()
+        end
+    end)
+    minimapButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine(UI_TITLE)
+        GameTooltip:AddLine(UI_STATUS(), 1, 1, 1, true)
+        GameTooltip:AddLine("Left-click: " .. UI_CLICK_TEXT, 0.6, 0.8, 1)
+        GameTooltip:AddLine("Right-click: options. Drag: move this button.", 0.6, 0.8, 1)
+        GameTooltip:Show()
+    end)
+    minimapButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    PlaceMinimapButton()
+    UpdateMinimapButton()
+end
+
+optionsPanel = CreateFrame("Frame", UI_NAME .. "Options", UIParent)
+optionsPanel.name = UI_TITLE
+optionsPanel:Hide()
+
+local optionsTitle = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+optionsTitle:SetPoint("TOPLEFT", 16, -16)
+optionsTitle:SetText(UI_TITLE)
+
+local optionsText = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+optionsText:SetPoint("TOPLEFT", optionsTitle, "BOTTOMLEFT", 0, -8)
+optionsText:SetWidth(560)
+optionsText:SetJustifyH("LEFT")
+
+local optionsStatus = optionsPanel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+optionsStatus:SetPoint("TOPLEFT", optionsText, "BOTTOMLEFT", 0, -12)
+optionsStatus:SetWidth(560)
+optionsStatus:SetJustifyH("LEFT")
+
+local minimapCheck = CreateFrame("CheckButton", UI_NAME .. "MinimapCheck", optionsPanel,
+    "InterfaceOptionsCheckButtonTemplate")
+minimapCheck:SetPoint("TOPLEFT", optionsStatus, "BOTTOMLEFT", -2, -12)
+_G[UI_NAME .. "MinimapCheckText"]:SetText("Show the minimap button")
+minimapCheck:SetScript("OnClick", function(self)
+    UI_DB().hideMinimap = not self:GetChecked()
+    UpdateMinimapButton()
+end)
+
+local openButton = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
+openButton:SetWidth(160); openButton:SetHeight(22)
+openButton:SetPoint("TOPLEFT", minimapCheck, "BOTTOMLEFT", 2, -12)
+openButton:SetText(UI_CLICK_TEXT:sub(1, 1):upper() .. UI_CLICK_TEXT:sub(2))
+openButton:SetScript("OnClick", function()
+    InterfaceOptionsFrame:Hide()
+    UI_TOGGLE()
+end)
+
+optionsPanel:SetScript("OnShow", function()
+    optionsText:SetText(UI_HELP)
+    optionsStatus:SetText(UI_STATUS())
+    minimapCheck:SetChecked(not UI_DB().hideMinimap)
+    if available then openButton:Enable() else openButton:Disable() end
+end)
+
+InterfaceOptions_AddCategory(optionsPanel)
+
+local uiEvents = CreateFrame("Frame")
+uiEvents:RegisterEvent("PLAYER_LOGIN")
+uiEvents:SetScript("OnEvent", CreateMinimapButton)

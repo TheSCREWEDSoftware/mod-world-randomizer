@@ -216,7 +216,8 @@ buttons for each party / raid member to see their account's achievements and thi
 server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
 nothing is shown in chat. `/randach <name>` opens a group member directly. If the server doesn't answer within
 10 seconds of logging in (no module, `Randomizer.Enable = 0` or achievements off), the addon turns itself off until
-the next login.
+the next login. A minimap button (drag it around; right-click for options) opens it, and the addon has a page in
+Interface > AddOns (minimap button on / off). The open window updates by itself every few seconds.
 
 ## About the stats eras
 
