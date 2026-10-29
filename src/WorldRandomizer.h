@@ -111,6 +111,9 @@ struct RandomizerConfig
     bool shiftQuests = true;      // quests of moved zones follow their creatures (level, level requirement, XP)
     bool shiftQuestMoney = true;  // and their reward money
     bool questMinLevelFromBracket = true; // level requirement = the bottom of the zone's new bracket
+    bool questSwapRewards = true; // shifted quests reward similar items of their new level
+    bool lootSwap = true;         // creatures whose level moved drop weapons and armor of their level
+    uint32 lootSwapMargin = 3;    // levels an item may be off before it is swapped
     std::vector<uint32> excludeEntries;
 
     uint8 dungeonMode = 2; // 0 unchanged, 1 shift by as much as the entrance zone moved, 2 scale to the group
@@ -120,6 +123,9 @@ struct RandomizerConfig
     // publishes the brackets and stops shifting dungeon levels itself. Needs both modules' collective switches on.
     bool collectiveSetting = true;
     bool collective = false;
+    // And mod-dynamic-scaling scales the open world inside each zone's bracket (Collective.WorldScaling there):
+    // this module then leaves open world creature levels to it
+    bool collectiveWorld = false;
 
     bool playerStart = true;
     bool playerStartSkipDK = true;
@@ -156,6 +162,7 @@ struct QuestOriginal
     int32 level = 0;
     uint32 minLevel = 0;
     int32 money = 0;
+    uint8 rewardsSwapped = 0;
 };
 
 struct StartLocation
@@ -188,6 +195,7 @@ public:
     std::size_t ReplacedCount() const { return _replaced; }
     std::size_t ShiftedCount() const { return _spawnZone.size(); }
     QuestOriginal const* GetQuestOriginal(uint32 questId) const;
+    bool IsShiftedSpawn(ObjectGuid::LowType spawnId) const { return _spawnZone.count(spawnId) > 0; }
 
     // Level hooks
     bool AdjustLevel(Map* map, ObjectGuid::LowType spawnId, uint8& level) const;
@@ -216,6 +224,7 @@ private:
     void ShiftQuests();
     void ComputeDungeonShifts();
     void PublishDungeonBrackets();
+    void PublishZoneBrackets();
     void LoadStartLocations();
     uint32 ResolveSeed();
 

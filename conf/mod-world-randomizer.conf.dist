@@ -176,6 +176,29 @@ Randomizer.Quests.ShiftMoney = 1
 Randomizer.Quests.MinLevelFromBracket = 1
 
 #
+#    Randomizer.Quests.SwapRewards
+#        Description: With Quests.Shift, weapon and armor rewards of shifted quests are swapped for similar ones of
+#                     the quest's new level: same slot, same armor or weapon type, same quality, taken from other
+#                     quests' rewards. A Bloodmyst Isle quest squeezed to level 5 rewards a level 5 item instead of
+#                     a level 18 one. The same for everyone (the 3.3.5 client shows one level per item).
+#        Default:     1 - enabled
+#                     0 - disabled
+
+Randomizer.Quests.SwapRewards = 1
+
+#
+#    Randomizer.Loot.Swap
+#    Randomizer.Loot.SwapMargin
+#        Description: Creatures whose level moved (kept creatures of moved zones, and creatures mod-dynamic-scaling
+#                     scaled) drop weapons and armor of their level: an item more than SwapMargin levels away from
+#                     the creature's level is swapped for a similar item (same slot, type and quality) that drops
+#                     somewhere at about that level. Swapped when the creature dies, so group rolls see the new item.
+#        Default:     1 / 3
+
+Randomizer.Loot.Swap = 1
+Randomizer.Loot.SwapMargin = 3
+
+#
 #    Randomizer.Creatures.ComputeMissingZones
 #        Description: Most rows of `creature` have zoneId 0. The first start works out their zones from the
 #                     terrain (slow once) and saves them in `world_randomizer_spawn_zone`. You can also run
@@ -206,7 +229,9 @@ Randomizer.Dungeons.Mode = 2
 #                     shuffle is on here). Then this module hands every dungeon's bracket (from its entrance zone)
 #                     to mod-dynamic-scaling, which scales the dungeon in Simple mode inside that bracket: Ragefire
 #                     Chasm in a 31-40 bracket scales between 31 and 40. This module stops shifting dungeon levels
-#                     itself, and mod-dynamic-scaling leaves the open world to this module.
+#                     itself. With DynamicScaling.Collective.WorldScaling (on by default) mod-dynamic-scaling also
+#                     scales the open world inside each zone's bracket, following each player's level, and this
+#                     module stops remapping open world creature levels; otherwise it leaves the open world here.
 #        Default:     1 - enabled
 #                     0 - disabled (the two modules ignore each other)
 

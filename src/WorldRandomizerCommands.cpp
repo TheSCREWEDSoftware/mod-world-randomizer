@@ -76,9 +76,10 @@ namespace
             MoneyText(quest->GetRewOrReqMoney(0)));
 
         if (QuestOriginal const* original = sWorldRandomizer->GetQuestOriginal(quest->GetQuestId()))
-            handler->PSendSysMessage("{}  (was level {}, needs {}, money {})", head,
+            handler->PSendSysMessage("{}  (was level {}, needs {}, money {}){}", head,
                 original->level < 0 ? "your level" : std::to_string(original->level), original->minLevel,
-                MoneyText(original->money));
+                MoneyText(original->money), original->rewardsSwapped ?
+                    Acore::StringFormat(", {} rewards swapped", original->rewardsSwapped) : "");
         else
             handler->PSendSysMessage("{}  (not shifted)", head);
     }

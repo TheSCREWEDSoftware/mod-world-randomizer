@@ -11,6 +11,9 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   by level and split into land / water and normal / elite. All spawns of one creature in a zone become the
   same random creature, so packs stay packs.
 - **Kept creatures** (quest kill targets, spawns with their own scripts) move their level into the new bracket.
+- **Items** (`Randomizer.Quests.SwapRewards`, `Randomizer.Loot.Swap`): weapon and armor rewards of shifted quests,
+  and drops of creatures whose level moved, are swapped for similar items of the right level (same slot, type and
+  quality). A 3.3.5 client shows one level per item, so items are swapped rather than scaled.
 - **Quests** of a moved zone move with it (`Randomizer.Quests.Shift`): their level, so the XP and the colour in the
   quest log follow, their level requirement and their reward money. Elwynn Forest in 41-50 has level 41-50 quests
   that can be taken from level 41 (`Randomizer.Quests.MinLevelFromBracket`: the bottom of the zone's bracket).
@@ -243,7 +246,11 @@ With both modules enabled and both collective switches on (`Randomizer.Collectiv
 `DynamicScaling.Collective.WorldRandomizer` there, both on by default), each reads the other's settings from the
 config and they split the work: this module writes every dungeon's bracket (from its entrance zone) to
 `world_randomizer_dungeon_bracket`, and mod-dynamic-scaling scales those dungeons in Simple mode inside that
-bracket (Ragefire Chasm in a 31-40 bracket scales between 31 and 40) and leaves the open world alone. Dungeons
+bracket (Ragefire Chasm in a 31-40 bracket scales between 31 and 40). With `DynamicScaling.Collective.WorldScaling`
+(on by default) it also scales the open world inside each zone's bracket (written to
+`world_randomizer_zone_bracket`): creatures follow each player's level and `.scaling` choice but never leave the
+zone's bracket, so a level 1 player in Bloodmyst Isle (1-10) meets level 1 creatures, and this module stops
+remapping open world levels; without it, mod-dynamic-scaling leaves the open world alone. Dungeons
 with a city entrance follow the zone around the city (`world_randomizer_instance`: Ragefire Chasm follows
 Durotar, the Stockade Elwynn Forest, the Violet Hold Crystalsong Forest).
 

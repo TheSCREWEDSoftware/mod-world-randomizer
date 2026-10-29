@@ -23,6 +23,9 @@
 #include "World.h"
 #include "WorldPacket.h"
 
+void LoadRandomizerItemSwaps();
+uint32 RandomizerSwapRewardItem(uint32 entry, uint8 fromMin, uint8 fromMax, uint8 toMin, uint8 toMax, uint32 seed);
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -227,10 +230,15 @@ void WorldRandomizerMgr::LoadConfig()
         sConfigMgr->GetOption<bool>("DynamicScaling.Enable", false, false) &&
         sConfigMgr->GetOption<bool>("DynamicScaling.Instance.Enable", true, false) &&
         sConfigMgr->GetOption<bool>("DynamicScaling.Collective.WorldRandomizer", false, false);
+    c.collectiveWorld = c.collective && sConfigMgr->GetOption<bool>("DynamicScaling.World.Enable", true, false) &&
+        sConfigMgr->GetOption<bool>("DynamicScaling.Collective.WorldScaling", true, false);
 
     c.shiftQuests = sConfigMgr->GetOption<bool>("Randomizer.Quests.Shift", true);
     c.shiftQuestMoney = sConfigMgr->GetOption<bool>("Randomizer.Quests.ShiftMoney", true);
     c.questMinLevelFromBracket = sConfigMgr->GetOption<bool>("Randomizer.Quests.MinLevelFromBracket", true);
+    c.questSwapRewards = sConfigMgr->GetOption<bool>("Randomizer.Quests.SwapRewards", true);
+    c.lootSwap = sConfigMgr->GetOption<bool>("Randomizer.Loot.Swap", true);
+    c.lootSwapMargin = sConfigMgr->GetOption<uint32>("Randomizer.Loot.SwapMargin", 3);
 
     c.playerStart = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.Enable", true);
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
@@ -263,6 +271,7 @@ void WorldRandomizerMgr::LoadConfig()
     if (!c.moduleEnable)
     {
         c.enable = false;
+        c.lootSwap = false;
         c.announce = false;
         c.hardcoreAnnounce = false;
         c.hardcoreMode = 0;
@@ -301,6 +310,7 @@ void WorldRandomizerMgr::Initialize()
     if (!_config.enable)
     {
         PublishDungeonBrackets(); // clears what an earlier run left
+        PublishZoneBrackets();
         return;
     }
 
@@ -311,6 +321,9 @@ void WorldRandomizerMgr::Initialize()
     if (_config.replaceCreatures || _config.shiftKeptLevels)
         ReplaceCreatures();
 
+    if (_config.lootSwap || (_config.shiftQuests && _config.questSwapRewards))
+        LoadRandomizerItemSwaps();
+
     if (_config.shiftQuests)
         ShiftQuests();
 
@@ -318,6 +331,7 @@ void WorldRandomizerMgr::Initialize()
         ComputeDungeonShifts();
 
     PublishDungeonBrackets();
+    PublishZoneBrackets();
 
     if (_config.playerStart)
         LoadStartLocations();
@@ -822,7 +836,8 @@ bool WorldRandomizerMgr::AdjustLevel(Map* map, ObjectGuid::LowType spawnId, uint
         return true;
     }
 
-    if (!spawnId)
+    // Collective with mod-dynamic-scaling's open world scaling: it scales creatures inside the zone's bracket
+    if (!spawnId || _config.collectiveWorld)
         return false;
 
     auto itr = _spawnZone.find(spawnId);
@@ -879,6 +894,29 @@ void WorldRandomizerMgr::ShiftQuests()
             quest->*QuestFieldAccess::Level = newLevel;
         }
 
+        // Rewards of the new level: similar weapons and armor (same slot, armor type and quality)
+        if (_config.questSwapRewards)
+        {
+            uint8 swapped = 0;
+            auto swap = [&](uint32& item, uint32 slot)
+            {
+                if (!item)
+                    return;
+                uint32 newItem = RandomizerSwapRewardItem(item, zone->levelMin, zone->levelMax, to.levelMin,
+                    to.levelMax, _seed ^ (questId * 31 + slot));
+                if (newItem != item)
+                {
+                    item = newItem;
+                    ++swapped;
+                }
+            };
+            for (uint32 i = 0; i < QUEST_REWARDS_COUNT; ++i)
+                swap(quest->RewardItemId[i], i);
+            for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
+                swap(quest->RewardChoiceItemId[i], 10 + i);
+            _questOriginal[questId].rewardsSwapped = swapped;
+        }
+
         if (quest->GetMinLevel() > 0)
         {
             // The whole zone is meant for its bracket: by default any quest there can be taken from its bottom level
@@ -922,6 +960,26 @@ QuestOriginal const* WorldRandomizerMgr::GetQuestOriginal(uint32 questId) const
 {
     auto itr = _questOriginal.find(questId);
     return itr != _questOriginal.end() ? &itr->second : nullptr;
+}
+
+// Every shuffled zone's bracket, for mod-dynamic-scaling's open world scaling (collective)
+void WorldRandomizerMgr::PublishZoneBrackets()
+{
+    WorldDatabase.DirectExecute("DELETE FROM `world_randomizer_zone_bracket`");
+    if (!_config.collectiveWorld || _zones.empty())
+        return;
+
+    std::string values;
+    for (RandomizerZone const& zone : _zones)
+    {
+        Bracket const& bracket = _config.brackets[zone.bracket];
+        if (!values.empty())
+            values += ',';
+        values += Acore::StringFormat("({},{},{})", zone.zoneId, bracket.levelMin, bracket.levelMax);
+    }
+
+    WorldDatabase.DirectExecute("INSERT INTO `world_randomizer_zone_bracket` (`zone_id`, `level_min`, `level_max`) "
+        "VALUES " + values);
 }
 
 void WorldRandomizerMgr::PublishDungeonBrackets()
