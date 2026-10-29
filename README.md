@@ -52,10 +52,18 @@ across restarts until you reroll it.
 
 Plain HTML + JavaScript, no build step.
 
-- `index.html`: character roller. A co-op panel rolls a whole party (party size, no duplicate classes) and gives
-  a share code carrying the rolls, era, allowed lists and world seed; friends paste it to see the same party.
-  The rest: Era, faction, race, class, spec, two professions; tick which factions, races and
-  classes may be rolled (Death Knights are off by default, they start at 55); hardcore mode locks the first roll. It also tells you which bracket 1 zones you can start in with the seed from the map page.
+- `index.html`: character roller, for one player or a party (up to 40, two per row). Each player rolls a race
+  (shown as its face and gender), class, spec and two professions, and can reroll everything or one of them, plus
+  the faction and the start zone; the world seed can be rerolled too. Rerolls are counted per player and per thing.
+  Each player has their own preferences: what may be rolled (click the icons; Death Knights are off by default,
+  they start at 55), and how: Random, Chances (a weight per race, class, spec...), Shuffle (each comes up once
+  before any repeats) or Pick. Professions can be made to include a gathering and/or a crafting one.
+  Party rules: one faction or each their own, what may be the same for two players (race, class, spec,
+  professions), and compatible professions (each player's two go together, or the party covers itself: Mining +
+  Alchemy next to Herbalism + Jewelcrafting). Players can trade races, classes, specs (same class) and
+  professions. Each player's code carries their roll, preferences and counts; several codes combine into one
+  party, and the party code carries everything, the world seed included. Hardcore mode locks the first roll.
+  Icons show their name on hover; "Show" switches to names.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
 

@@ -26,551 +26,129 @@
           <option value="vanilla">Vanilla</option>
         </select>
       </label>
-      <label class="field"><span>Faction</span>
-        <select id="faction">
-          <option value="random">Random</option>
-          <option value="alliance">Alliance</option>
-          <option value="horde">Horde</option>
-        </select>
-      </label>
-      <label class="field"><span>Race</span><select id="race"></select></label>
-      <label class="field"><span>Class</span><select id="class"></select></label>
-      <label class="field"><span>Spec</span>
-        <select id="spec">
-          <option value="random">Random</option>
-          <option value="no">Don't roll</option>
-        </select>
-      </label>
-      <label class="field"><span>Professions</span>
-        <select id="profs">
-          <option value="random">Random (two)</option>
-          <option value="no">Don't roll</option>
-        </select>
-      </label>
       <label class="field"><span>Rules</span>
         <select id="hardcore">
           <option value="1">Hardcore: one roll, no rerolls</option>
           <option value="0">Reroll as much as you like</option>
         </select>
       </label>
-      <button id="roll">Roll</button>
-      <button id="reset" class="quiet" title="Clears a locked hardcore roll">Start over</button>
-    </div>
-    <p id="lockinfo" class="muted" style="margin:10px 0 0"></p>
-  </section>
-
-  <section class="panel">
-    <h2>Allowed</h2>
-    <p class="muted" style="margin:0 0 10px">Only ticked factions, races and classes can be rolled. Death Knights
-      are off by default: they start at level 55 in Ebon Hold.</p>
-    <div class="allowed">
-      <div><div class="label">Factions</div><div id="allow-factions" class="checks"></div></div>
-      <div><div class="label">Races</div><div id="allow-races" class="checks"></div></div>
-      <div><div class="label">Classes</div><div id="allow-classes" class="checks"></div></div>
-    </div>
-    <p style="margin:10px 0 0"><button class="quiet" id="allow-all">Allow everything</button>
-      <button class="quiet" id="allow-default">Back to default</button></p>
-  </section>
-
-  <section class="panel">
-    <div class="cards" id="cards"></div>
-  </section>
-
-  <section class="panel">
-    <h2>Co-op party</h2>
-    <p class="muted" style="margin-top:0">Roll a whole party of the same faction and share one code with your friends:
-      it carries the rolls, the era, the allowed races / classes and the world seed, so everyone sees the same thing.
-      In game, player 1 types <code>.coop create</code> and the others <code>.coop join</code> with the 6 letter code it
-      gives, so you all start in the same place.</p>
-    <div class="controls">
-      <label class="field"><span>Party size</span>
-        <input type="number" id="party-size" min="1" max="40" value="5" style="width:90px">
-      </label>
-      <label class="field"><span>Classes</span>
-        <select id="party-unique">
-          <option value="1">No duplicate classes</option>
-          <option value="0">Duplicates allowed</option>
+      <label class="field"><span>Show</span>
+        <select id="display">
+          <option value="icons">Faces and icons</option>
+          <option value="both">Icons and names</option>
+          <option value="names">Names only</option>
         </select>
       </label>
-      <button id="party-roll">Roll party</button>
+      <button id="roll-all">Roll everyone</button>
+      <button id="add-player" class="quiet">Add player</button>
+      <button id="reset" class="quiet" title="Clears every roll, locked hardcore rolls and reroll counts">
+        Start over</button>
     </div>
-    <div id="party" style="margin-top:12px"></div>
-    <div class="controls" style="margin-top:12px">
-      <label class="field" style="flex:1;min-width:260px"><span>Share code</span>
-        <input type="text" id="party-code" readonly placeholder="Roll a party first">
+    <p id="world" class="muted" style="margin:12px 0 0"></p>
+    <p id="msg" class="msg" style="margin:8px 0 0"></p>
+  </section>
+
+  <section class="panel" id="party-rules-panel">
+    <h2>Co-op party</h2>
+    <p class="muted" style="margin-top:0">With two or more players these rules apply between them. In game, player 1
+      types <code>.coop create</code> and the others <code>.coop join</code> with the 6 letter code it gives, so you all
+      start in the same place (one faction).</p>
+    <div class="controls">
+      <label class="field"><span>Faction</span>
+        <select id="rule-faction">
+          <option value="same">Same faction for everyone</option>
+          <option value="free">Each player rolls their own</option>
+          <option value="different">All different (2 players at most)</option>
+        </select>
+      </label>
+      <div class="field"><span>May be the same for two players</span>
+        <div class="checks" style="padding:6px 0">
+          <label class="check"><input type="checkbox" id="dup-race"> Race</label>
+          <label class="check"><input type="checkbox" id="dup-class"> Class</label>
+          <label class="check"><input type="checkbox" id="dup-spec"> Spec (same class)</label>
+        </div>
+      </div>
+      <label class="field"><span>Professions</span>
+        <select id="dup-prof">
+          <option value="yes">Duplicates allowed</option>
+          <option value="slot">Not in the same slot (Profession 1 / 2)</option>
+          <option value="no">Never twice in the party</option>
+        </select>
+      </label>
+      <label class="field"><span>Compatible professions</span>
+        <select id="compat">
+          <option value="off">Off</option>
+          <option value="player">Each player's two go together (Skinning + Leatherworking)</option>
+          <option value="party">The party covers itself (Mining + Alchemy, Herbalism + Jewelcrafting)</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Players</h2>
+    <div id="players" class="players"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Codes</h2>
+    <p class="muted" style="margin-top:0">Each player's "Copy code" carries their roll, preferences and reroll counts.
+      Paste one or more codes (a party code, or everyone's own codes, one per line) to put them together in one
+      party. The party code also carries the era, the rules and the world seed.</p>
+    <div class="controls">
+      <label class="field grow"><span>Party code</span>
+        <input type="text" id="party-code" readonly>
       </label>
       <button class="quiet" id="party-copy">Copy</button>
     </div>
     <div class="controls" style="margin-top:10px">
-      <label class="field" style="flex:1;min-width:260px"><span>A friend's code</span>
-        <input type="text" id="party-load-code" placeholder="Paste the code here">
+      <label class="field grow"><span>Codes to combine</span>
+        <textarea id="load-codes" rows="3" placeholder="Paste codes here, one per line"></textarea>
       </label>
-      <button class="quiet" id="party-load">Load</button>
+      <div class="stack">
+        <button class="quiet" id="codes-add">Add to the party</button>
+        <button class="quiet" id="codes-replace">Replace the party</button>
+      </div>
     </div>
-    <p id="party-msg" class="muted" style="margin:8px 0 0"></p>
+  </section>
+
+  <section class="panel" id="trade-panel">
+    <h2>Trade</h2>
+    <p class="muted" style="margin-top:0">Two players swap a race, a class (its spec goes with it), a spec (same class
+      only) or a profession (not one the other already has in their other slot).</p>
+    <div class="controls">
+      <label class="field"><span>Player</span><select id="trade-a"></select></label>
+      <label class="field"><span>gives</span>
+        <select id="trade-what">
+          <option value="race">Race</option>
+          <option value="class">Class</option>
+          <option value="spec">Spec</option>
+          <option value="prof">Profession</option>
+        </select>
+      </label>
+      <label class="field" id="trade-sa-box"><span>slot</span>
+        <select id="trade-sa"><option value="0">Profession 1</option><option value="1">Profession 2</option></select>
+      </label>
+      <label class="field"><span>to player</span><select id="trade-b"></select></label>
+      <label class="field" id="trade-sb-box"><span>for their</span>
+        <select id="trade-sb"><option value="0">Profession 1</option><option value="1">Profession 2</option></select>
+      </label>
+      <button id="trade-go">Trade</button>
+    </div>
+    <p id="trade-msg" class="muted" style="margin:10px 0 0"></p>
   </section>
 
   <section class="panel">
-    <h2>Where you start</h2>
-    <div id="start" class="muted"></div>
+    <h2 id="prefs-title">Preferences</h2>
+    <div id="prefs-tabs" class="tabs"></div>
+    <div id="prefs"></div>
   </section>
 </main>
 
+<div class="tooltip" id="tip"></div>
+
 <script src="zones.js"></script>
 <script src="randomizer.js"></script>
-<script>
-(function () {
-  'use strict';
-
-  var R = window.WorldRandomizer;
-
-  var RACES = {
-    1: { name: 'Human', faction: 'alliance' },
-    2: { name: 'Orc', faction: 'horde' },
-    3: { name: 'Dwarf', faction: 'alliance' },
-    4: { name: 'Night Elf', faction: 'alliance' },
-    5: { name: 'Undead', faction: 'horde' },
-    6: { name: 'Tauren', faction: 'horde' },
-    7: { name: 'Gnome', faction: 'alliance' },
-    8: { name: 'Troll', faction: 'horde' },
-    10: { name: 'Blood Elf', faction: 'horde', since: 'tbc' },
-    11: { name: 'Draenei', faction: 'alliance', since: 'tbc' }
-  };
-
-  var CLASSES = {
-    1: { name: 'Warrior', specs: ['Arms', 'Fury', 'Protection'] },
-    2: { name: 'Paladin', specs: ['Holy', 'Protection', 'Retribution'] },
-    3: { name: 'Hunter', specs: ['Beast Mastery', 'Marksmanship', 'Survival'] },
-    4: { name: 'Rogue', specs: ['Assassination', 'Combat', 'Subtlety'] },
-    5: { name: 'Priest', specs: ['Discipline', 'Holy', 'Shadow'] },
-    6: { name: 'Death Knight', specs: ['Blood', 'Frost', 'Unholy'], since: 'wrath' },
-    7: { name: 'Shaman', specs: ['Elemental', 'Enhancement', 'Restoration'] },
-    8: { name: 'Mage', specs: ['Arcane', 'Fire', 'Frost'] },
-    9: { name: 'Warlock', specs: ['Affliction', 'Demonology', 'Destruction'] },
-    11: { name: 'Druid', specs: ['Balance', 'Feral', 'Restoration'] }
-  };
-
-  // Race -> classes in 3.3.5. Vanilla and TBC are the same minus Death Knights (and minus the TBC races).
-  var COMBOS = {
-    1: [1, 2, 4, 5, 6, 8, 9],
-    2: [1, 3, 4, 6, 7, 9],
-    3: [1, 2, 3, 4, 5, 6],
-    4: [1, 3, 4, 5, 6, 11],
-    5: [1, 4, 5, 6, 8, 9],
-    6: [1, 3, 6, 7, 11],
-    7: [1, 4, 6, 8, 9],
-    8: [1, 3, 4, 5, 6, 7, 8],
-    10: [2, 3, 4, 5, 6, 8, 9],
-    11: [1, 2, 3, 5, 6, 7, 8]
-  };
-
-  var PROFESSIONS = [
-    { name: 'Alchemy' }, { name: 'Blacksmithing' }, { name: 'Enchanting' }, { name: 'Engineering' },
-    { name: 'Herbalism' }, { name: 'Inscription', since: 'wrath' }, { name: 'Jewelcrafting', since: 'tbc' },
-    { name: 'Leatherworking' }, { name: 'Mining' }, { name: 'Skinning' }, { name: 'Tailoring' }
-  ];
-
-  var ERA_ORDER = { vanilla: 0, tbc: 1, wrath: 2 };
-  var STORAGE_KEY = 'wr-character';
-  var ALLOWED_KEY = 'wr-allowed';
-
-  function defaultAllowed() {
-    var allowed = { factions: { alliance: true, horde: true }, races: {}, classes: {} };
-    Object.keys(RACES).forEach(function (id) { allowed.races[id] = true; });
-    Object.keys(CLASSES).forEach(function (id) { allowed.classes[id] = Number(id) !== 6; }); // no Death Knights
-    return allowed;
-  }
-
-  function loadAllowed() {
-    var allowed = defaultAllowed();
-    try {
-      var saved = JSON.parse(localStorage.getItem(ALLOWED_KEY) || 'null');
-      if (saved) {
-        ['factions', 'races', 'classes'].forEach(function (group) {
-          Object.keys(saved[group] || {}).forEach(function (key) { allowed[group][key] = !!saved[group][key]; });
-        });
-      }
-    } catch (e) { /* storage blocked: defaults */ }
-    return allowed;
-  }
-
-  function saveAllowed() {
-    try { localStorage.setItem(ALLOWED_KEY, JSON.stringify(allowed)); } catch (e) { /* storage blocked */ }
-  }
-
-  var allowed = loadAllowed();
-
-  var els = {};
-  ['era', 'faction', 'race', 'class', 'spec', 'profs', 'hardcore', 'roll', 'reset', 'cards', 'start', 'lockinfo',
-    'allow-factions', 'allow-races', 'allow-classes', 'allow-all', 'allow-default']
-    .forEach(function (id) { els[id] = document.getElementById(id); });
-
-  function inEra(item, era) {
-    return !item.since || ERA_ORDER[era] >= ERA_ORDER[item.since];
-  }
-
-  function pick(list) {
-    var rng = new R.Rng(R.randomSeed());
-    return list[rng.below(list.length)];
-  }
-
-  function store(value) {
-    try {
-      if (value) localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch (e) { /* storage blocked: the roll just isn't remembered */ }
-  }
-
-  function restore() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (e) { return null; }
-  }
-
-  function races(era, faction) {
-    return Object.keys(RACES).map(Number).filter(function (id) {
-      var race = RACES[id];
-      return inEra(race, era) && allowed.races[id] && allowed.factions[race.faction] &&
-        (faction === 'random' || race.faction === faction);
-    });
-  }
-
-  function classes(era, raceId) {
-    var list = raceId ? COMBOS[raceId] : Object.keys(CLASSES).map(Number);
-    return list.filter(function (id) { return inEra(CLASSES[id], era) && allowed.classes[id]; });
-  }
-
-  function renderAllowed() {
-    function boxes(container, group, items) {
-      container.innerHTML = items.map(function (item) {
-        return '<label class="check"><input type="checkbox" data-group="' + group + '" data-key="' + item.key + '"' +
-          (allowed[group][item.key] ? ' checked' : '') + '> ' + item.label + '</label>';
-      }).join('');
-    }
-    boxes(els['allow-factions'], 'factions', [
-      { key: 'alliance', label: '<span class="alliance">Alliance</span>' },
-      { key: 'horde', label: '<span class="horde">Horde</span>' }
-    ]);
-    boxes(els['allow-races'], 'races', Object.keys(RACES).map(function (id) {
-      return { key: id, label: RACES[id].name + (RACES[id].since ? ' <span class="muted">(TBC+)</span>' : '') };
-    }));
-    boxes(els['allow-classes'], 'classes', Object.keys(CLASSES).map(function (id) {
-      return { key: id, label: CLASSES[id].name + (CLASSES[id].since ? ' <span class="muted">(Wrath)</span>' : '') };
-    }));
-  }
-
-  document.addEventListener('change', function (e) {
-    var box = e.target;
-    if (!box.getAttribute || !box.getAttribute('data-group')) return;
-    allowed[box.getAttribute('data-group')][box.getAttribute('data-key')] = box.checked;
-    saveAllowed();
-    refreshChoices();
-  });
-
-  function fillSelect(select, ids, table, keep) {
-    var previous = keep ? select.value : 'random';
-    select.innerHTML = '<option value="random">Random</option>' + ids.map(function (id) {
-      return '<option value="' + id + '">' + table[id].name + '</option>';
-    }).join('');
-    select.value = ids.indexOf(Number(previous)) >= 0 ? previous : 'random';
-  }
-
-  function refreshChoices() {
-    var era = els.era.value;
-    fillSelect(els.race, races(era, els.faction.value), RACES, true);
-    var raceId = els.race.value === 'random' ? 0 : Number(els.race.value);
-    var classIds = raceId ? classes(era, raceId) : Array.from(new Set(races(era, els.faction.value)
-      .reduce(function (all, r) { return all.concat(classes(era, r)); }, []))).sort(function (a, b) { return a - b; });
-    fillSelect(els['class'], classIds, CLASSES, true);
-  }
-
-  function roll() {
-    var era = els.era.value;
-    var faction = els.faction.value;
-
-    // Race and class must make a valid pair, so roll from the valid pairs
-    var pairs = [];
-    races(era, faction).forEach(function (raceId) {
-      if (els.race.value !== 'random' && Number(els.race.value) !== raceId) return;
-      classes(era, raceId).forEach(function (classId) {
-        if (els['class'].value !== 'random' && Number(els['class'].value) !== classId) return;
-        pairs.push([raceId, classId]);
-      });
-    });
-
-    if (!pairs.length) {
-      alertBox('Nothing to roll: no allowed race and class go together with these choices in this era.');
-      return;
-    }
-
-    var pair = pick(pairs);
-    var result = {
-      era: era,
-      race: pair[0],
-      cls: pair[1],
-      gender: pick(['m', 'f']),
-      spec: els.spec.value === 'random' ? pick(CLASSES[pair[1]].specs) : '',
-      profs: []
-    };
-
-    if (els.profs.value === 'random') {
-      var pool = PROFESSIONS.filter(function (p) { return inEra(p, era); }).map(function (p) { return p.name; });
-      var first = pick(pool);
-      var second = pick(pool.filter(function (p) { return p !== first; }));
-      result.profs = [first, second];
-    }
-
-    result.locked = els.hardcore.value === '1';
-    store(result);
-    show(result);
-  }
-
-  function alertBox(text) {
-    els.cards.innerHTML = '<p class="muted">' + text + '</p>';
-  }
-
-  function card(label, value, sub, image) {
-    return '<div class="card' + (value ? '' : ' empty') + '"><div class="label">' + label + '</div>' +
-      (image ? '<img src="' + image + '" alt="">' : '<div style="height:116px"></div>') +
-      '<div class="value">' + (value || '&mdash;') + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '') +
-      '</div>';
-  }
-
-  function show(result) {
-    if (!result) {
-      els.cards.innerHTML = card('Race', '', '', '') + card('Class', '', '', '') + card('Spec', '', '', '') +
-        card('Professions', '', '', '');
-      els.start.innerHTML = 'Roll a character first.';
-      els.lockinfo.textContent = '';
-      els.roll.disabled = false;
-      return;
-    }
-
-    var race = RACES[result.race];
-    var cls = CLASSES[result.cls];
-    var factionName = race.faction === 'alliance' ? '<span class="alliance">Alliance</span>' :
-      '<span class="horde">Horde</span>';
-
-    els.cards.innerHTML =
-      card('Race', race.name, factionName + ' &middot; ' + (result.gender === 'm' ? 'Male' : 'Female'),
-        'img/race/' + result.race + result.gender + '.webp') +
-      card('Class', cls.name, '', 'img/class/' + result.cls + '.webp') +
-      card('Spec', result.spec, result.spec ? cls.name : 'not rolled', '') +
-      card('Professions', result.profs.join(' &amp; '), result.profs.length ? '' : 'not rolled', '');
-
-    els.roll.disabled = !!result.locked;
-    els.lockinfo.innerHTML = result.locked ?
-      '<span class="locked">Hardcore roll locked.</span> One life, no rerolls. "Start over" clears it.' : '';
-
-    showStart(result);
-  }
-
-  function showStart(result) {
-    if (result.cls === 6) {
-      els.start.innerHTML = 'Death Knights start in Acherus: The Ebon Hold as usual.';
-      return;
-    }
-
-    var settings = {};
-    try { settings = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { settings = {}; }
-    if (!settings.seed) {
-      els.start.innerHTML = 'Open the <a href="map.html">world map</a> to pick a seed; your start zone depends on it.';
-      return;
-    }
-
-    var brackets = R.parseBrackets(settings.brackets || '');
-    if (!brackets.length) brackets = [{ min: 1, max: 80 }];
-    var zones = R.shuffleZones(window.RANDOMIZER_ZONES || [], {
-      seed: settings.seed >>> 0, brackets: brackets, scope: settings.scope || 0, balanced: !!settings.balanced,
-      adjacent: settings.adjacent === undefined ? true : !!settings.adjacent,
-      factionStarts: settings.factionStarts === undefined ? true : !!settings.factionStarts
-    });
-
-    var lowest = 0;
-    brackets.forEach(function (b, i) { if (b.min < brackets[lowest].min) lowest = i; });
-    var team = RACES[result.race].faction === 'alliance' ? 0 : 1;
-    var own = zones.filter(function (z) { return z.bracket === lowest && z.territory === team; });
-    var contested = zones.filter(function (z) { return z.bracket === lowest && z.territory === 2; });
-    var candidates = own.length ? own : contested;
-
-    els.start.innerHTML = candidates.length ?
-      'With seed <b>' + settings.seed + '</b> you start in one of: <b>' + candidates.map(function (z) {
-        return z.name;
-      }).join(', ') + '</b> (bracket 1, ' + brackets[lowest].min + '&ndash;' + brackets[lowest].max + ').' +
-      (own.length ? '' : ' No zone of your faction landed in bracket 1, so these are contested zones.') :
-      'No bracket 1 zone fits your faction with this seed; the server falls back to the normal start.';
-  }
-
-  els.era.addEventListener('change', refreshChoices);
-  els.faction.addEventListener('change', refreshChoices);
-  els.race.addEventListener('change', refreshChoices);
-  els.roll.addEventListener('click', roll);
-  els.reset.addEventListener('click', function () { store(null); show(null); });
-  els['allow-all'].addEventListener('click', function () {
-    ['factions', 'races', 'classes'].forEach(function (group) {
-      Object.keys(allowed[group]).forEach(function (key) { allowed[group][key] = true; });
-    });
-    saveAllowed(); renderAllowed(); refreshChoices();
-  });
-  els['allow-default'].addEventListener('click', function () {
-    allowed = defaultAllowed();
-    saveAllowed(); renderAllowed(); refreshChoices();
-  });
-
-  // ---- Co-op party ----
-  var PARTY_KEY = 'wr-party';
-
-  function rollParty(size, unique) {
-    var era = els.era.value;
-    var factions = ['alliance', 'horde'].filter(function (f) {
-      return allowed.factions[f] && (els.faction.value === 'random' || els.faction.value === f);
-    });
-    if (!factions.length) return { error: 'No allowed faction.' };
-    var faction = pick(factions);
-
-    var members = [];
-    var usedClasses = {};
-    for (var i = 0; i < size; i++) {
-      var pairs = [];
-      races(era, faction).forEach(function (raceId) {
-        classes(era, raceId).forEach(function (classId) {
-          if (!unique || !usedClasses[classId]) pairs.push([raceId, classId]);
-        });
-      });
-      if (!pairs.length) {
-        return { error: unique ? 'Not enough allowed classes for ' + size + ' players without duplicates.' :
-          'No allowed race and class go together.' };
-      }
-      var pair = pick(pairs);
-      usedClasses[pair[1]] = true;
-      var member = { race: pair[0], cls: pair[1], gender: pick(['m', 'f']), spec: '', profs: [] };
-      if (els.spec.value === 'random') member.spec = pick(CLASSES[pair[1]].specs);
-      if (els.profs.value === 'random') {
-        var pool = PROFESSIONS.filter(function (p) { return inEra(p, era); }).map(function (p) { return p.name; });
-        var first = pick(pool);
-        member.profs = [first, pick(pool.filter(function (p) { return p !== first; }))];
-      }
-      members.push(member);
-    }
-    return { era: era, faction: faction, members: members };
-  }
-
-  function encodeParty(party) {
-    var map = {};
-    try { map = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { map = {}; }
-    // Compact: masks for the allowed lists, indexes for specs and professions
-    function mask(group) {
-      return Object.keys(allowed[group]).reduce(function (bits, id) {
-        return allowed[group][id] ? bits | (1 << Number(id)) : bits;
-      }, 0);
-    }
-    var profNames = PROFESSIONS.map(function (p) { return p.name; });
-    var data = {
-      v: 2, e: ['vanilla', 'tbc', 'wrath'].indexOf(party.era), f: party.faction === 'alliance' ? 0 : 1,
-      a: [(allowed.factions.alliance ? 1 : 0) | (allowed.factions.horde ? 2 : 0), mask('races'), mask('classes')],
-      w: [map.seed || 0, map.brackets || '', map.scope || 0, map.balanced ? 1 : 0,
-        map.adjacent === 0 ? 0 : 1, map.factionStarts === 0 ? 0 : 1],
-      m: party.members.map(function (m) {
-        return [m.race, m.cls, m.gender === 'm' ? 0 : 1, CLASSES[m.cls].specs.indexOf(m.spec)]
-          .concat(m.profs.map(function (name) { return profNames.indexOf(name); }));
-      })
-    };
-    var json = JSON.stringify(data);
-    return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-
-  function decodeParty(code) {
-    var base64 = code.trim().replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    var data = JSON.parse(decodeURIComponent(escape(atob(base64))));
-    if (data.v !== 2 || !Array.isArray(data.m)) throw new Error('not a party code');
-    var profNames = PROFESSIONS.map(function (p) { return p.name; });
-    var result = { era: ['vanilla', 'tbc', 'wrath'][data.e] || 'wrath', faction: data.f ? 'horde' : 'alliance' };
-    result.allowed = { factions: { alliance: !!(data.a[0] & 1), horde: !!(data.a[0] & 2) }, races: {}, classes: {} };
-    Object.keys(RACES).forEach(function (id) { result.allowed.races[id] = !!(data.a[1] & (1 << Number(id))); });
-    Object.keys(CLASSES).forEach(function (id) { result.allowed.classes[id] = !!(data.a[2] & (1 << Number(id))); });
-    result.world = { seed: data.w[0], brackets: data.w[1], scope: data.w[2], balanced: data.w[3], adjacent: data.w[4],
-      factionStarts: data.w[5] };
-    result.members = data.m.map(function (m) {
-      return { race: m[0], cls: m[1], gender: m[2] ? 'f' : 'm', spec: m[3] >= 0 ? CLASSES[m[1]].specs[m[3]] : '',
-        profs: m.slice(4).map(function (i) { return profNames[i]; }) };
-    });
-    return result;
-  }
-
-  function showParty(party) {
-    var box = document.getElementById('party');
-    if (!party) { box.innerHTML = ''; return; }
-    box.innerHTML = '<div class="cards">' + party.members.map(function (m, i) {
-      var race = RACES[m.race];
-      var cls = CLASSES[m.cls];
-      return '<div class="card"><div class="label">Player ' + (i + 1) + (i === 0 ? ' &middot; .coop create' : '') +
-        '</div><div style="display:flex;justify-content:center;gap:8px">' +
-        '<img src="img/race/' + m.race + m.gender + '.webp" alt="" style="width:56px;height:56px;margin:10px 0">' +
-        '<img src="img/class/' + m.cls + '.webp" alt="" style="width:56px;height:56px;margin:10px 0"></div>' +
-        '<div class="value">' + race.name + ' ' + cls.name + '</div>' +
-        '<div class="sub">' + (m.spec || 'spec not rolled') + (m.profs.length ? ' &middot; ' + m.profs.join(' &amp; ') : '') +
-        '</div></div>';
-    }).join('') + '</div>';
-  }
-
-  var partyMsg = document.getElementById('party-msg');
-  var partyCode = document.getElementById('party-code');
-
-  document.getElementById('party-roll').addEventListener('click', function () {
-    var size = Math.max(1, Math.min(40, Math.floor(Number(document.getElementById('party-size').value) || 5)));
-    var party = rollParty(size, document.getElementById('party-unique').value === '1');
-    if (party.error) { partyMsg.textContent = party.error; return; }
-    partyMsg.textContent = '';
-    partyCode.value = encodeParty(party);
-    try { localStorage.setItem(PARTY_KEY, JSON.stringify(party)); } catch (e) { /* storage blocked */ }
-    showParty(party);
-  });
-
-  document.getElementById('party-copy').addEventListener('click', function () {
-    if (!partyCode.value || !navigator.clipboard) return;
-    navigator.clipboard.writeText(partyCode.value).then(function () { partyMsg.textContent = 'Copied.'; });
-  });
-
-  document.getElementById('party-load').addEventListener('click', function () {
-    var code = document.getElementById('party-load-code').value;
-    try {
-      var data = decodeParty(code);
-      allowed = data.allowed;
-      saveAllowed();
-      if (data.world.seed) {
-        var map = {};
-        try { map = JSON.parse(localStorage.getItem('wr-map') || '{}'); } catch (e) { map = {}; }
-        Object.keys(data.world).forEach(function (key) { map[key] = data.world[key]; });
-        try { localStorage.setItem('wr-map', JSON.stringify(map)); } catch (e) { /* storage blocked */ }
-      }
-      els.era.value = data.era;
-      var party = { era: data.era, faction: data.faction, members: data.members };
-      try { localStorage.setItem(PARTY_KEY, JSON.stringify(party)); } catch (e) { /* storage blocked */ }
-      partyCode.value = code.trim();
-      renderAllowed();
-      refreshChoices();
-      showParty(party);
-      partyMsg.textContent = 'Loaded: ' + party.members.length + ' players, world seed ' +
-        (data.world.seed || 'not set') + '.';
-      if (party.members.length) showStart({ race: party.members[0].race, cls: party.members[0].cls });
-    } catch (e) {
-      partyMsg.textContent = 'That is not a party code.';
-    }
-  });
-
-  try {
-    var savedParty = JSON.parse(localStorage.getItem(PARTY_KEY) || 'null');
-    if (savedParty) { showParty(savedParty); partyCode.value = encodeParty(savedParty); }
-  } catch (e) { /* storage blocked */ }
-
-  renderAllowed();
-  refreshChoices();
-  var saved = restore();
-  if (saved) {
-    els.era.value = saved.era;
-    refreshChoices();
-  }
-  show(saved);
-})();
-</script>
+<script src="roller.js"></script>
 </body>
 </html>
