@@ -1724,7 +1724,8 @@
       items + '</div></div>';
   }
 
-  // Factions side by side with their races below them; classes with their specs, 5 a row; professions gathering / crafting
+  // Factions side by side with their races below them; classes with their specs, 5 a row; professions
+  // gathering / crafting
   function renderBans() {
     var sides = ['alliance', 'horde'].map(function (f) {
       return '<div class="banside ' + f + '"><div class="banhead">' + banItem('faction', 'faction', f) +
@@ -1745,7 +1746,8 @@
           return banItem('prof', 'prof1', key);
         }).join('') + '</div></div>';
     }).join('');
-    $('bans').innerHTML = banRow('Factions &amp; races', sides, ' bansides') + banRow('Classes &amp; specs', classes, ' bangrid') + banRow('Professions', profs, ' bangroups');
+    $('bans').innerHTML = banRow('Factions &amp; races', sides, ' bansides') +
+      banRow('Classes &amp; specs', classes, ' bangrid') + banRow('Professions', profs, ' bangroups');
   }
 
   function renderSetup() {
