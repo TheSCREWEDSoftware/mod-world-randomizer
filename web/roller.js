@@ -1943,7 +1943,8 @@
             return '<div class="item' + (mine || by || rule ? ' off slashed' : '') + (why ? ' blocked' : '') +
               '" data-act="' + (why ? '' : 'w-draft') + '" data-key="' + k + ':' + key + '" data-tip="' +
               esc(name + (mine ? ': banned by you' : why ? ': ' + why : '')) + '"><span class="icw"><img src="' +
-              itemIcon(cat, key, 'm') + '" alt=""></span>' + (showNames() ? '<span class="iname">' + esc(cat === 'spec' ?
+              itemIcon(cat, key, 'm') + '" alt=""></span>' +
+              (showNames() ? '<span class="iname">' + esc(cat === 'spec' ?
                 CLASSES[key.split('-')[0]].specs[key.split('-')[1]] : name) + '</span>' : '') + '</div>';
           }).join('') + '</div>';
         }).join('');
@@ -2040,22 +2041,47 @@
         '<button data-act="w-next"' + (stepReady(w.step) ? '' : ' disabled') + '>Next</button>') + '</div></div>';
   }
 
+  // Why player n can't take the picked character under the rules ('' if they can)
+  function pickFits(n, w) {
+    var faction = factionChoices(n).filter(function (f) { return f.key === w.faction; })[0];
+    if (!faction || faction.why) return faction ? faction.why : 'faction';
+    var race = raceChoices(n, w.faction).filter(function (r) { return r.key === w.race; })[0];
+    if (!race || race.why) return race ? race.why : 'race';
+    var cls = classChoices(n, w.race).filter(function (c) { return c.key === w.cls; })[0];
+    if (!cls || cls.why) return cls ? cls.why : 'class';
+    var spec = specChoices(n, w.cls).filter(function (sp) { return sp.key === w.spec; })[0];
+    if (!spec || spec.why) return spec ? spec.why : 'spec';
+    var p1 = profChoices(n, 1, w.prof2).filter(function (c) { return Number(c.key) === w.prof1; })[0];
+    var p2 = profChoices(n, 2, w.prof1).filter(function (c) { return Number(c.key) === w.prof2; })[0];
+    if (!p1 || p1.why) return p1 ? p1.why : 'profession';
+    if (!p2 || p2.why) return p2 ? p2.why : 'profession';
+    return '';
+  }
+
   function applyPick() {
     var w = wiz;
     var specN = Number(w.spec.split('-')[1]);
     var targets = [w.player];
-    if (w.also === 'all') targets = state.players.map(function (q, n) { return n; });
+    if (w.also === 'all') {
+      state.players.forEach(function (q, n) { if (n !== w.player) targets.push(n); }); // the picker's own first
+    }
     else if (w.also !== 'none') targets.push(Number(w.also));
     var skipped = [];
+    var picked = [];
     targets.forEach(function (n) {
       var q = state.players[n];
-      if (locked(q)) { skipped.push(q.name); return; }
+      if (locked(q)) { skipped.push(q.name + ' (hardcore roll locked)'); return; }
+      // The other players have to fit the rules too, counting the ones just given this character
+      if (n !== w.player) {
+        var why = pickFits(n, w);
+        if (why) { skipped.push(q.name + ' (' + why + ')'); return; }
+      }
       q.roll = { race: Number(w.race), cls: Number(w.cls), gender: w.gender, spec: specN, profs: [w.prof1, w.prof2],
         zone: 0 };
+      picked.push(q.name);
     });
-    message('Picked for ' + targets.filter(function (n) { return skipped.indexOf(state.players[n].name) < 0; })
-      .map(function (n) { return esc(state.players[n].name); }).join(', ') + '.' +
-      (skipped.length ? ' Locked hardcore rolls kept: ' + skipped.map(esc).join(', ') + '.' : ''), 'good');
+    message('Picked for ' + picked.map(esc).join(', ') + '.' +
+      (skipped.length ? ' Not for: ' + skipped.map(esc).join(', ') + '.' : ''), skipped.length ? 'bad' : 'good');
     closeWizard();
   }
 

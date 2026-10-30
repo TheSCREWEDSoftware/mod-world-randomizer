@@ -22,6 +22,7 @@
 #include "ScriptMgr.h"
 
 #include <algorithm>
+#include <cstring>
 #include <map>
 #include <tuple>
 #include <unordered_set>
@@ -72,10 +73,17 @@ namespace
 
     bool LooksReal(ItemTemplate const* proto)
     {
-        static char const* const BAD[] = { "Test", "TEST", "Deprecated", "DEPRECATED", "Monster -", "[PH]", "OLD",
-            "zz", "QA ", "Unused", "UNUSED" };
+        std::string const& name = proto->Name1;
+        // Anywhere in the name
+        static char const* const BAD[] = { "Test ", "TEST", "Deprecated", "DEPRECATED", "Monster -", "[PH]",
+            "Unused", "UNUSED" };
         for (char const* bad : BAD)
-            if (proto->Name1.find(bad) != std::string::npos)
+            if (name.find(bad) != std::string::npos)
+                return false;
+        // At the start only ("zzOLD...", "OLD ..."), so "Grizzly" or "of the BOLD" stay
+        static char const* const PREFIXES[] = { "zz", "ZZ", "OLD", "QA ", "Test" };
+        for (char const* prefix : PREFIXES)
+            if (name.compare(0, std::strlen(prefix), prefix) == 0)
                 return false;
         return true;
     }
@@ -162,6 +170,13 @@ public:
             // Class restricted items (a paladin-only belt) only stand in for items with the same restriction
             ItemTemplate const* candidate = sObjectMgr->GetItemTemplate(item.entry);
             if (candidate->AllowableClass != proto->AllowableClass && int32(candidate->AllowableClass) != -1)
+                continue;
+            // Nor race or faction restricted ones, unless the original had the same restriction
+            if (candidate->AllowableRace != proto->AllowableRace && int32(candidate->AllowableRace) != -1)
+                continue;
+            uint32 factionFlags = ITEM_FLAG2_FACTION_HORDE | ITEM_FLAG2_FACTION_ALLIANCE;
+            uint32 candidateFaction = candidate->Flags2 & factionFlags;
+            if (candidateFaction && candidateFaction != (proto->Flags2 & factionFlags))
                 continue;
 
             uint32 distance = uint32(std::abs(int32(item.level) - int32(targetLevel)));

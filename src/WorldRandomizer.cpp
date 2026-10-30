@@ -975,11 +975,12 @@ void WorldRandomizerMgr::PublishZoneBrackets()
         Bracket const& bracket = _config.brackets[zone.bracket];
         if (!values.empty())
             values += ',';
-        values += Acore::StringFormat("({},{},{})", zone.zoneId, bracket.levelMin, bracket.levelMax);
+        values += Acore::StringFormat("({},{},{},{},{})", zone.zoneId, bracket.levelMin, bracket.levelMax,
+            zone.levelMin, zone.levelMax);
     }
 
-    WorldDatabase.DirectExecute("INSERT INTO `world_randomizer_zone_bracket` (`zone_id`, `level_min`, `level_max`) "
-        "VALUES " + values);
+    WorldDatabase.DirectExecute("INSERT INTO `world_randomizer_zone_bracket` (`zone_id`, `level_min`, `level_max`, "
+        "`home_min`, `home_max`) VALUES " + values);
 }
 
 void WorldRandomizerMgr::PublishDungeonBrackets()

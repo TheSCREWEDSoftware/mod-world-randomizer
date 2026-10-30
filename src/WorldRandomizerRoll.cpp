@@ -368,8 +368,28 @@ public:
                 return Acore::StringFormat("Unlearn {} first: it isn't in the roll ({}).", SkillName(skill),
                     RollText(p));
 
-        // Talents spent outside the rolled tree are given back for free
-        if (p.spec >= 0 && player->GetFreeTalentPoints() < player->CalculateTalentsPoints())
+        // Talents outside the rolled tree, per spec: the active spec's are given back for free; the other spec (dual
+        // spec) would bring its own back on a switch, without the talent hook, so it has to be clean first
+        bool offActive = false;
+        bool offOther = false;
+        if (p.spec >= 0)
+            for (auto const& [spellId, talent] : player->GetTalentMap())
+            {
+                if (!talent || talent->State == PLAYERSPELL_REMOVED)
+                    continue;
+                TalentEntry const* entry = sTalentStore.LookupEntry(talent->talentID);
+                TalentTabEntry const* tab = entry ? sTalentTabStore.LookupEntry(entry->TalentTab) : nullptr;
+                if (!tab || int32(tab->tabpage) == p.spec)
+                    continue;
+                if (talent->IsInSpec(player->GetActiveSpec()))
+                    offActive = true;
+                if (talent->specMask & ~player->GetActiveSpecMask())
+                    offOther = true;
+            }
+        if (offOther)
+            return Acore::StringFormat("Your other spec has talents outside {}: switch to it, reset its talents at a "
+                "trainer (or put them all in {}) and try again.", SpecNames(p.cls)[p.spec], SpecNames(p.cls)[p.spec]);
+        if (offActive)
         {
             player->resetTalents(true);
             player->SendTalentsInfoData(false);
@@ -397,7 +417,9 @@ public:
                 continue;
 
             uint32 skill = PROFESSION_SKILLS[prof];
-            if (learn && !player->HasSkill(skill) && sSpellMgr->GetSpellInfo(PROFESSION_APPRENTICE[prof]))
+            // Within the server's primary profession limit (the trainer checks it; learnSpell doesn't)
+            if (learn && !player->HasSkill(skill) && player->GetFreePrimaryProfessionPoints() > 0 &&
+                sSpellMgr->GetSpellInfo(PROFESSION_APPRENTICE[prof]))
             {
                 player->learnSpell(PROFESSION_APPRENTICE[prof]);
                 if (player->HasSkill(skill))
