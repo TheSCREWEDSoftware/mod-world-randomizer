@@ -106,6 +106,9 @@ Plain HTML + JavaScript, no build step.
   note. It lists what changed, and downloads the old file (backup) and the new one. The templates are in
   `web/conf-templates.js`; `python3 tools/make_conf_templates.py` rebuilds it after a `.conf.dist` changes.
 
+To put the pages online (GitHub Pages), `tools/publish_web.sh <your github.io clone>` copies `web/` into it as
+`world-randomizer/`; commit and push that site.
+
 `web/randomizer.js` is the same shuffle as `WorldRandomizer.cpp` (same generator, same order), so a seed shows
 exactly the world the server will build. Tested for 72 seed / scope / balance / adjacency combinations against the
 C++.
