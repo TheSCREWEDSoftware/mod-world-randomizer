@@ -854,8 +854,10 @@ public:
             return true;
         }
 
-        // Rolls from the web roller (WorldRandomizerRoll.cpp) work whether achievements are on or not
-        if (HandleRollAddonMessage(player, msg.substr(prefix.size())))
+        // Rolls from the web roller (WorldRandomizerRoll.cpp) and the Group tab (WorldRandomizerCoop.cpp) work whether
+        // achievements are on or not
+        if (HandleRollAddonMessage(player, msg.substr(prefix.size())) ||
+            HandleCoopAddonMessage(player, msg.substr(prefix.size())))
             return true;
 
         // The level of the first talent point, so the addon can open the talent frame before level 10, and the

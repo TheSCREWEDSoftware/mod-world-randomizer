@@ -515,6 +515,12 @@ namespace
     }
 }
 
+std::string RandomizerRollText(Player* player)
+{
+    std::optional<RolledPlayer> roll = sRoll->Enabled() ? sRoll->Get(player) : std::nullopt;
+    return roll ? RollText(*roll) : "";
+}
+
 // Addon requests (prefix RANDACH), answered whether achievements are on or not:
 //   "ROLL"                  your roll                          -> R
 //   "ROLLPEEK\t<code>"      the players in a code

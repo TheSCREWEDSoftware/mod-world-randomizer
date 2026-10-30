@@ -4,6 +4,8 @@
  * One player types .coop create and gets a short code; friends type .coop join <code> and start in the same place
  * (a random bracket 1 zone when the randomizer runs), with their hearthstone there and, if the leader is online,
  * in the leader's group. Up to Randomizer.Coop.MaxSize players per code, only while at most Randomizer.Coop.MaxLevel.
+ * The RandomizerAchievements addon's Group tab does the same with buttons, and can also start a character alone, for
+ * good: such a character can't make or join a party later.
  */
 
 #include "WorldRandomizer.h"
@@ -11,6 +13,7 @@
 #include "CharacterCache.h"
 #include "Chat.h"
 #include "CommandScript.h"
+#include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "Group.h"
@@ -20,10 +23,14 @@
 #include "Player.h"
 #include "Random.h"
 #include "ScriptMgr.h"
+#include "WorldPacket.h"
+#include "WorldRandomizerAchievements.h"
+#include "WorldSession.h"
 
 #include <algorithm>
 #include <cctype>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace Acore::ChatCommands;
@@ -69,6 +76,12 @@ public:
     {
         _parties.clear();
         _memberOf.clear();
+        _alone.clear();
+
+        if (QueryResult result = CharacterDatabase.Query("SELECT `guid` FROM `world_randomizer_start_choice`"))
+            do
+                _alone.insert((*result)[0].Get<uint32>());
+            while (result->NextRow());
 
         if (QueryResult result = CharacterDatabase.Query("SELECT `code`, `leader`, `map`, `zone`, `x`, `y`, `z`, `o`, "
             "`team` FROM `world_randomizer_coop`"))
@@ -105,7 +118,36 @@ public:
             } while (result->NextRow());
         }
 
-        LOG_INFO("module", "mod-world-randomizer: {} co-op parties loaded.", _parties.size());
+        LOG_INFO("module", "mod-world-randomizer: {} co-op parties loaded, {} characters started alone.",
+            _parties.size(), _alone.size());
+    }
+
+    bool StartedAlone(ObjectGuid::LowType guid) const { return _alone.count(guid) != 0; }
+
+    // Why this player can't make or join a party now; empty when they can
+    std::string CantStart(Player* player) const
+    {
+        RandomizerConfig const& config = sWorldRandomizer->Config();
+        if (!Enabled())
+            return "Co-op starts are off on this server.";
+        ObjectGuid::LowType guid = player->GetGUID().GetCounter();
+        if (CodeOf(guid))
+            return "You are already in a co-op party. Type .coop to see it.";
+        if (StartedAlone(guid))
+            return "This character started alone; that can't be changed.";
+        if (player->GetLevel() > config.coopMaxLevel)
+            return Acore::StringFormat("Co-op parties can only be made or joined up to level {}.",
+                config.coopMaxLevel);
+        return "";
+    }
+
+    // For good: this character won't make or join a party
+    void StartAlone(Player* player)
+    {
+        ObjectGuid::LowType guid = player->GetGUID().GetCounter();
+        _alone.insert(guid);
+        CharacterDatabase.Execute("REPLACE INTO `world_randomizer_start_choice` (`guid`, `chosen_at`) VALUES ({}, {})",
+            guid, GameTime::GetGameTime().count());
     }
 
     std::string const* CodeOf(ObjectGuid::LowType guid) const
@@ -225,9 +267,38 @@ private:
 
     std::unordered_map<std::string, Party> _parties;
     std::unordered_map<ObjectGuid::LowType, std::string> _memberOf;
+    std::unordered_set<ObjectGuid::LowType> _alone;
 };
 
 #define sCoop CoopMgr::instance()
+
+namespace
+{
+    // Why the party can't start in this zone (it must be one of the leader's start zones); empty when it can
+    std::string BadStartZone(Player* player, uint32 zoneId)
+    {
+        if (!zoneId)
+            return "";
+        std::vector<uint32> zones = sWorldRandomizer->StartZones(player);
+        if (sWorldRandomizer->Config().enable && std::find(zones.begin(), zones.end(), zoneId) != zones.end())
+            return "";
+        std::string list;
+        for (uint32 id : zones)
+            if (RandomizerZone const* zone = sWorldRandomizer->FindZone(id))
+                list += Acore::StringFormat("{}{} ({})", list.empty() ? "" : ", ", zone->name, id);
+        return Acore::StringFormat("You can't start in zone {}. Your start zones: {}.", zoneId,
+            list.empty() ? "none" : list);
+    }
+
+    void AnnounceCreated(Player* player, std::string const& code)
+    {
+        RandomizerConfig const& config = sWorldRandomizer->Config();
+        ChatHandler(player->GetSession()).PSendSysMessage("|cffFF8000[Co-op]|r Your party code is |cffFFFF00{}|r. "
+            "Share it: friends type |cffFFFF00.coop join {}|r (or use the Group tab of the RandomizerAchievements "
+            "addon) to start here with you (up to {} players, level {} or lower).", code, code, config.coopMaxSize,
+            config.coopMaxLevel);
+    }
+}
 
 class CoopWorldScript : public WorldScript
 {
@@ -265,26 +336,11 @@ public:
 
     static bool CheckAllowed(ChatHandler* handler, Player* player)
     {
-        RandomizerConfig const& config = sWorldRandomizer->Config();
-        if (!sCoop->Enabled())
-        {
-            handler->SendErrorMessage("Co-op starts are off on this server.");
-            return false;
-        }
-
-        if (sCoop->CodeOf(player->GetGUID().GetCounter()))
-        {
-            handler->SendErrorMessage("You are already in a co-op party. Type .coop to see it.");
-            return false;
-        }
-
-        if (player->GetLevel() > config.coopMaxLevel)
-        {
-            handler->SendErrorMessage("Co-op parties can only be made or joined up to level {}.", config.coopMaxLevel);
-            return false;
-        }
-
-        return true;
+        std::string error = sCoop->CantStart(player);
+        if (error.empty())
+            return true;
+        handler->SendErrorMessage(error, false);
+        return false;
     }
 
     static bool HandleInfoCommand(ChatHandler* handler)
@@ -298,6 +354,11 @@ public:
 
         Player* player = handler->GetSession()->GetPlayer();
         std::string const* code = sCoop->CodeOf(player->GetGUID().GetCounter());
+        if (!code && sCoop->StartedAlone(player->GetGUID().GetCounter()))
+        {
+            handler->SendSysMessage("This character started alone: it can't make or join a co-op party.");
+            return true;
+        }
         if (!code)
         {
             handler->PSendSysMessage("You are not in a co-op party. Up to level {}: .coop create makes one and gives "
@@ -329,27 +390,14 @@ public:
         if (!CheckAllowed(handler, player))
             return false;
 
-        if (zoneId && *zoneId)
+        std::string error = BadStartZone(player, zoneId ? *zoneId : 0);
+        if (!error.empty())
         {
-            std::vector<uint32> zones = sWorldRandomizer->StartZones(player);
-            if (!sWorldRandomizer->Config().enable ||
-                std::find(zones.begin(), zones.end(), *zoneId) == zones.end())
-            {
-                std::string list;
-                for (uint32 id : zones)
-                    if (RandomizerZone const* zone = sWorldRandomizer->FindZone(id))
-                        list += Acore::StringFormat("{}{} ({})", list.empty() ? "" : ", ", zone->name, id);
-                handler->SendErrorMessage("You can't start in zone {}. Your start zones: {}.", *zoneId,
-                    list.empty() ? "none" : list);
-                return false;
-            }
+            handler->SendErrorMessage(error, false);
+            return false;
         }
 
-        std::string code = sCoop->Create(player, zoneId ? *zoneId : 0);
-        RandomizerConfig const& config = sWorldRandomizer->Config();
-        handler->PSendSysMessage("|cffFF8000[Co-op]|r Your party code is |cffFFFF00{}|r. Share it: friends type "
-            "|cffFFFF00.coop join {}|r to start here with you (up to {} players, level {} or lower).", code, code,
-            config.coopMaxSize, config.coopMaxLevel);
+        AnnounceCreated(player, sCoop->Create(player, zoneId ? *zoneId : 0));
         return true;
     }
 
@@ -371,6 +419,170 @@ public:
         return true;
     }
 };
+
+namespace
+{
+    void SendAddon(Player* player, std::string const& body)
+    {
+        std::string text = std::string(RANDOMIZER_ADDON_PREFIX) + "\t" + body;
+        if (text.size() > 254)
+            text.resize(254);
+
+        WorldPacket data;
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, LANG_ADDON, player, player, text);
+        player->SendDirectMessage(&data);
+    }
+
+    std::string NoTabs(std::string text)
+    {
+        std::replace(text.begin(), text.end(), '\t', ' ');
+        return text;
+    }
+
+    // "G\t<state>\t<code>\t<members>\t<max size>\t<max level>\t<can choose 0/1>\t<why not>",
+    // state 0 co-op off, 1 not chosen yet, 2 started alone, 3 in a party;
+    // then "Z\t<zone id>\t<name>" per start zone the party could pick, and "E\tSTART"
+    void SendStart(Player* player)
+    {
+        RandomizerConfig const& config = sWorldRandomizer->Config();
+        ObjectGuid::LowType guid = player->GetGUID().GetCounter();
+        std::string const* code = sCoop->Enabled() ? sCoop->CodeOf(guid) : nullptr;
+        uint32 state = !sCoop->Enabled() ? 0 : code ? 3 : sCoop->StartedAlone(guid) ? 2 : 1;
+        std::size_t members = code ? sCoop->Find(*code)->members.size() : 0;
+        std::string whyNot = state == 1 ? sCoop->CantStart(player) : "";
+
+        SendAddon(player, Acore::StringFormat("G\t{}\t{}\t{}\t{}\t{}\t{}\t{}", state, code ? *code : "", members,
+            config.coopMaxSize, config.coopMaxLevel, state == 1 && whyNot.empty() ? 1 : 0, NoTabs(whyNot)));
+
+        if (state == 1 && whyNot.empty() && config.enable)
+            for (uint32 id : sWorldRandomizer->StartZones(player))
+                if (RandomizerZone const* zone = sWorldRandomizer->FindZone(id))
+                    SendAddon(player, Acore::StringFormat("Z\t{}\t{}", id, NoTabs(zone->name)));
+
+        SendAddon(player, "E\tSTART");
+    }
+
+    // One "M" line per member of your co-op party and of your group:
+    // "M\t<name>\t<online 0/1>\t<level>\t<race>\t<class>\t<zone>\t<flags>\t<roll>"
+    // flags: 1 co-op leader, 2 in your co-op party, 4 in your group, 8 you; then "E\tPARTY\t<count>\t<code>"
+    void SendParty(Player* player)
+    {
+        std::vector<ObjectGuid::LowType> guids;
+        std::unordered_map<ObjectGuid::LowType, uint32> flags;
+        auto add = [&](ObjectGuid::LowType guid, uint32 flag)
+        {
+            if (!flags.count(guid))
+                guids.push_back(guid);
+            flags[guid] |= flag;
+        };
+
+        add(player->GetGUID().GetCounter(), 8);
+        std::string const* code = sCoop->Enabled() ? sCoop->CodeOf(player->GetGUID().GetCounter()) : nullptr;
+        CoopMgr::Party const* party = code ? sCoop->Find(*code) : nullptr;
+        if (party)
+            for (ObjectGuid::LowType guid : party->members)
+                add(guid, 2 | (guid == party->leader ? 1 : 0));
+        if (Group* group = player->GetGroup())
+            for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+                if (Player* member = itr->GetSource())
+                    add(member->GetGUID().GetCounter(), 4);
+
+        LocaleConstant locale = player->GetSession()->GetSessionDbcLocale();
+        for (ObjectGuid::LowType guid : guids)
+        {
+            ObjectGuid fullGuid = ObjectGuid::Create<HighGuid::Player>(guid);
+            std::string name, zone, roll;
+            uint32 level = 0, race = 0, cls = 0;
+            bool online = false;
+            if (Player* member = ObjectAccessor::FindConnectedPlayer(fullGuid))
+            {
+                online = true;
+                name = member->GetName();
+                level = member->GetLevel();
+                race = member->getRace();
+                cls = member->getClass();
+                if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(member->GetZoneId()))
+                    zone = area->area_name[locale] && *area->area_name[locale] ? area->area_name[locale] :
+                        area->area_name[0];
+                roll = RandomizerRollText(member);
+            }
+            else if (CharacterCacheEntry const* entry = sCharacterCache->GetCharacterCacheByGuid(fullGuid))
+            {
+                name = entry->Name;
+                level = entry->Level;
+                race = entry->Race;
+                cls = entry->Class;
+            }
+            else
+                continue;
+
+            SendAddon(player, Acore::StringFormat("M\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", name, online ? 1 : 0, level,
+                race, cls, NoTabs(zone), flags[guid], NoTabs(roll)));
+        }
+        SendAddon(player, Acore::StringFormat("E\tPARTY\t{}\t{}", guids.size(), code ? *code : ""));
+    }
+}
+
+// Addon requests (prefix RANDACH) of the Group tab, answered whether achievements are on or not:
+//   "START"                  how this character starts                  -> G, Z..., E START
+//   "STARTSOLO"              start alone, for good                      -> G..., or X\t<error>
+//   "STARTCREATE\t<zone>"    make a co-op party (zone 0: a random one)  -> G..., or X\t<error>
+//   "STARTJOIN\t<code>"      join one                                   -> G..., or X\t<error>
+//   "PARTY"                  your co-op party and group                 -> M..., E PARTY
+bool HandleCoopAddonMessage(Player* player, std::string const& body)
+{
+    if (body == "START")
+    {
+        SendStart(player);
+        return true;
+    }
+
+    if (body == "PARTY")
+    {
+        SendParty(player);
+        return true;
+    }
+
+    bool solo = body == "STARTSOLO";
+    bool create = body.compare(0, 12, "STARTCREATE\t") == 0;
+    bool join = body.compare(0, 10, "STARTJOIN\t") == 0;
+    if (!solo && !create && !join)
+        return false;
+
+    ChatHandler chat(player->GetSession());
+    std::string error = sCoop->CantStart(player);
+    // Starting alone only needs the choice to be still open, whatever the level
+    if (solo && sCoop->Enabled() && !sCoop->CodeOf(player->GetGUID().GetCounter()) &&
+        !sCoop->StartedAlone(player->GetGUID().GetCounter()))
+        error.clear();
+
+    if (error.empty() && solo)
+    {
+        sCoop->StartAlone(player);
+        chat.SendSysMessage("|cffFF8000[Co-op]|r This character starts alone.");
+    }
+    else if (error.empty() && create)
+    {
+        uint32 zoneId = uint32(std::max(0, std::atoi(body.c_str() + 12)));
+        error = BadStartZone(player, zoneId);
+        if (error.empty())
+            AnnounceCreated(player, sCoop->Create(player, zoneId));
+    }
+    else if (error.empty() && join)
+    {
+        std::string code = Upper(body.substr(10));
+        code.erase(std::remove_if(code.begin(), code.end(), [](unsigned char c) { return std::isspace(c); }),
+            code.end());
+        error = sCoop->Join(code, player);
+        if (error.empty())
+            chat.PSendSysMessage("|cffFF8000[Co-op]|r You joined party {}. Your hearthstone is set here.", code);
+    }
+
+    if (!error.empty())
+        SendAddon(player, "X\t" + NoTabs(error));
+    SendStart(player);
+    return true;
+}
 
 void AddWorldRandomizerCoopScripts()
 {

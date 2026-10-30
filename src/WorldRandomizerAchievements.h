@@ -69,14 +69,19 @@ enum RandomizerAchReward : uint8
 //                     "P\t<id>:<done 0/1>:<progress>:<required>,..."
 //                     "E\tDEF\t<count>\t<expansion 1-3>" / "E\tGET\t<name>"   end of a reply;  "X\t<error>"
 //                     "L\t<level>"  first talent point level (Randomizer.Talents.StartLevel), before a DEF reply
+//   Rolls and the Group tab (co-op start, party info): see WorldRandomizerRoll.cpp and WorldRandomizerCoop.cpp
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
 // Goes up whenever the addon and the module change together; the addon's ADDON_VERSION
 // (addon/RandomizerAchievements/RandomizerAchievements.lua) must match it
-constexpr uint32 RANDOMIZER_ADDON_VERSION = 2;
+constexpr uint32 RANDOMIZER_ADDON_VERSION = 3;
 
 class Player;
 // WorldRandomizerRoll.cpp: ROLL / ROLLPEEK / ROLLSET requests; true when it was one
 bool HandleRollAddonMessage(Player* player, std::string const& body);
+// The roll this (online) character follows, as text; empty when none
+std::string RandomizerRollText(Player* player);
+// WorldRandomizerCoop.cpp: START / STARTSOLO / STARTCREATE / STARTJOIN / PARTY requests; true when it was one
+bool HandleCoopAddonMessage(Player* player, std::string const& body);
 
 namespace WorldRandomizerAchievements
 {

@@ -5,9 +5,11 @@
 -- turns itself off until the next login.
 -- /randach            show or hide the window
 -- /randach <name>     show a group member's achievements
+-- /randach group      the Group tab: start alone or with a co-op party, and your party's info
+-- /randach roll       tie this character to its roll from the roller page
 
 local PREFIX = "RANDACH"
-local ADDON_VERSION = 2   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
+local ADDON_VERSION = 3   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
 local serverVersion      -- what the module expects, from its "V" reply
 local ROW_HEIGHT = 50
 local ROWS = 8
@@ -29,6 +31,8 @@ local minimapButton, optionsPanel
 local autoRefresh = 0    -- seconds until the open window asks the server again
 local achievementsOff = false -- the server said achievements are off ("My roll" still works)
 local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
+local currentTab = 1     -- 1 achievements, 2 group
+local achWidgets = {}    -- what the achievements tab shows (hidden on the group tab)
 
 -- Made for the server's current content?
 local function IsActive(def)
@@ -119,6 +123,7 @@ local function CategoryButton(index)
     text:SetWidth(166)
     button.text = text
     catButtons[index] = button
+    table.insert(achWidgets, button)
     return button
 end
 
@@ -126,6 +131,7 @@ end
 local scroll = CreateFrame("ScrollFrame", "RandomizerAchievementsScroll", frame, "FauxScrollFrameTemplate")
 scroll:SetPoint("TOPLEFT", 200, -58)
 scroll:SetWidth(470); scroll:SetHeight(ROWS * ROW_HEIGHT)
+table.insert(achWidgets, scroll)
 
 local rows = {}
 for i = 1, ROWS do
@@ -199,6 +205,7 @@ for i = 1, ROWS do
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     rows[i] = row
+    table.insert(achWidgets, row)
 end
 
 -- Whose achievements: you and your group
@@ -217,6 +224,8 @@ myRoll:SetScript("OnClick", function() SlashCmdList["RANDACH"]("roll") end)
 local whoLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 whoLabel:SetPoint("BOTTOMLEFT", 22, 23)
 whoLabel:SetText("Show:")
+table.insert(achWidgets, whoLabel)
+table.insert(achWidgets, summary)
 
 local function GroupMembers()
     local names = { UnitName("player") }
@@ -332,6 +341,7 @@ local function UpdateMembers()
             button:SetWidth(90); button:SetHeight(22)
             button:SetPoint("BOTTOMLEFT", 62 + (index - 1) * 92, 18)
             memberButtons[index] = button
+            table.insert(achWidgets, button)
         end
         button:SetText(index == 1 and "Me" or name)
         button:SetScript("OnClick", function()
@@ -358,7 +368,7 @@ local function UpdateSummary()
 end
 
 local function Redraw()
-    if not frame:IsShown() then return end
+    if not frame:IsShown() or currentTab ~= 1 then return end
     UpdateSummary()
     UpdateCategories()
     UpdateMembers()
@@ -372,7 +382,10 @@ Request = function(name)
     Redraw()
 end
 
-refresh:SetScript("OnClick", function() Request(viewing) end)
+local RequestGroup
+refresh:SetScript("OnClick", function()
+    if currentTab == 2 then RequestGroup() else Request(viewing) end
+end)
 
 local Disable
 
@@ -603,11 +616,358 @@ local function OnRollMessage(parts)
     return false
 end
 
+-- ---------------------------------------------------------------- group tab (co-op start and party info)
+
+local start = { state = nil, code = "", members = 0, maxSize = 5, maxLevel = 1, canChoose = false, why = "" }
+local startZones, startZonesIncoming = {}, {}
+local party, partyIncoming = {}, {}
+local groupError       -- the server's answer to the last choice, when it was refused
+local waitingChoice    -- a choice was sent, its answer not back yet
+local startPrompted    -- the chooser opened by itself once this session
+local chosenZone = 0   -- 0: a random start zone
+local PARTY_ROWS = 10
+local ROW_TAGS = { { 1, "|cffFFD100Leader|r" }, { 8, "|cff88CCFFYou|r" } }
+
+local groupPanel = CreateFrame("Frame", nil, frame)
+groupPanel:SetPoint("TOPLEFT", 22, -46)
+groupPanel:SetPoint("BOTTOMRIGHT", -22, 46)
+groupPanel:Hide()
+
+local groupStatus = groupPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+groupStatus:SetPoint("TOPLEFT", 0, -4)
+groupStatus:SetWidth(670)
+groupStatus:SetJustifyH("LEFT")
+
+local groupErrorText = groupPanel:CreateFontString(nil, "OVERLAY", "GameFontRedSmall")
+groupErrorText:SetPoint("TOPLEFT", groupStatus, "BOTTOMLEFT", 0, -4)
+groupErrorText:SetWidth(670)
+groupErrorText:SetJustifyH("LEFT")
+
+-- The chooser: alone, or a party (make one, or join one with a code)
+local chooser = CreateFrame("Frame", nil, groupPanel)
+chooser:SetPoint("TOPLEFT", 0, -46)
+chooser:SetWidth(670); chooser:SetHeight(150)
+
+local function BigButton(parent, text, width)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetWidth(width or 180); button:SetHeight(26)
+    button:SetText(text)
+    return button
+end
+
+local aloneButton = BigButton(chooser, "Start alone")
+aloneButton:SetPoint("TOPLEFT", 0, 0)
+local partyButton = BigButton(chooser, "Start with a party")
+partyButton:SetPoint("LEFT", aloneButton, "RIGHT", 12, 0)
+
+local chooserHelp = chooser:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+chooserHelp:SetPoint("TOPLEFT", aloneButton, "BOTTOMLEFT", 0, -6)
+chooserHelp:SetWidth(670)
+chooserHelp:SetJustifyH("LEFT")
+chooserHelp:SetText("Alone: you play on your own; this character can never make or join a co-op party. " ..
+    "With a party: everyone starts in the same place, with their hearthstone there, in one group. " ..
+    "Same as .coop create and .coop join in chat.")
+
+local partyBox = CreateFrame("Frame", nil, chooser)
+partyBox:SetPoint("TOPLEFT", chooserHelp, "BOTTOMLEFT", 0, -10)
+partyBox:SetWidth(670); partyBox:SetHeight(80)
+partyBox:Hide()
+
+local makeLabel = partyBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+makeLabel:SetPoint("TOPLEFT", 0, 0)
+makeLabel:SetText("Make a party")
+
+local zoneMenu = CreateFrame("Frame", "RandomizerStartZoneMenu", partyBox, "UIDropDownMenuTemplate")
+zoneMenu:SetPoint("TOPLEFT", makeLabel, "BOTTOMLEFT", -16, -2)
+UIDropDownMenu_SetWidth(zoneMenu, 200)
+
+local function ZoneName(id)
+    if id == 0 then return "A random start zone" end
+    for _, zone in ipairs(startZones) do
+        if zone.id == id then return zone.name end
+    end
+    return "Zone " .. id
+end
+
+UIDropDownMenu_Initialize(zoneMenu, function()
+    local list = { 0 }
+    for _, zone in ipairs(startZones) do table.insert(list, zone.id) end
+    for _, id in ipairs(list) do
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = ZoneName(id)
+        info.checked = id == chosenZone
+        info.func = function()
+            chosenZone = id
+            UIDropDownMenu_SetText(zoneMenu, ZoneName(id))
+        end
+        UIDropDownMenu_AddButton(info)
+    end
+end)
+
+local createButton = BigButton(partyBox, "Create", 100)
+createButton:SetPoint("LEFT", zoneMenu, "RIGHT", -6, 2)
+
+local joinLabel = partyBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+joinLabel:SetPoint("TOPLEFT", 380, 0)
+joinLabel:SetText("Join a party (the 6 letter code)")
+
+local joinBox = CreateFrame("EditBox", "RandomizerJoinCode", partyBox, "InputBoxTemplate")
+joinBox:SetWidth(120); joinBox:SetHeight(20)
+joinBox:SetPoint("TOPLEFT", joinLabel, "BOTTOMLEFT", 6, -8)
+joinBox:SetAutoFocus(false)
+joinBox:SetMaxLetters(8)
+
+local joinButton = BigButton(partyBox, "Join", 100)
+joinButton:SetPoint("LEFT", joinBox, "RIGHT", 8, 0)
+
+-- Every choice is for good, so each one asks first
+local function Confirm(what, request)
+    StaticPopupDialogs["RANDOMIZER_START_CONFIRM"] = {
+        text = what .. "\n\nAre you sure you want to pick this option? You cannot redo this option.",
+        button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
+        OnAccept = function()
+            groupError = nil
+            waitingChoice = true
+            Send(request)
+        end,
+    }
+    StaticPopup_Show("RANDOMIZER_START_CONFIRM")
+end
+
+aloneButton:SetScript("OnClick", function()
+    Confirm("Start alone: this character will never make or join a co-op party.", "STARTSOLO")
+end)
+local UpdateGroup
+partyButton:SetScript("OnClick", function()
+    if partyBox:IsShown() then partyBox:Hide() else partyBox:Show() end
+    UpdateGroup()
+end)
+createButton:SetScript("OnClick", function()
+    Confirm("Make a co-op party starting in " .. ZoneName(chosenZone) .. ". You get a code to give your friends.",
+        "STARTCREATE\t" .. chosenZone)
+end)
+joinButton:SetScript("OnClick", function()
+    local code = joinBox:GetText():gsub("%s", ""):upper()
+    if code == "" then return end
+    joinBox:ClearFocus()
+    Confirm("Join co-op party " .. code .. ": you start where that party starts.", "STARTJOIN\t" .. code)
+end)
+joinBox:SetScript("OnEnterPressed", function() joinButton:Click() end)
+joinBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+-- Party members
+local partyTitle = groupPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+partyTitle:SetJustifyH("LEFT")
+
+local partyRows = {}
+for i = 1, PARTY_ROWS do
+    local row = CreateFrame("Frame", nil, groupPanel)
+    row:SetWidth(670); row:SetHeight(34)
+    row.bg = row:CreateTexture(nil, "BACKGROUND")
+    row.bg:SetAllPoints()
+    row.bg:SetTexture(0, 0, 0, 0.35)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetWidth(26); row.icon:SetHeight(26)
+    row.icon:SetPoint("LEFT", 4, 0)
+    row.icon:SetTexture("Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes")
+    row.name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 8, 1)
+    row.name:SetWidth(150); row.name:SetJustifyH("LEFT")
+    row.what = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.what:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
+    row.what:SetWidth(150); row.what:SetJustifyH("LEFT")
+    row.zone = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.zone:SetPoint("TOPLEFT", 200, -4)
+    row.zone:SetWidth(170); row.zone:SetJustifyH("LEFT")
+    row.tags = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.tags:SetPoint("TOPLEFT", row.zone, "BOTTOMLEFT", 0, -2)
+    row.tags:SetWidth(170); row.tags:SetJustifyH("LEFT")
+    row.roll = row:CreateFontString(nil, "OVERLAY", "GameFontGreenSmall")
+    row.roll:SetPoint("LEFT", 380, 0)
+    row.roll:SetWidth(284); row.roll:SetHeight(30); row.roll:SetJustifyH("LEFT")
+    row:Hide()
+    partyRows[i] = row
+end
+
+local partyMore = groupPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+
+local function StartText()
+    local s = start
+    if s.state == nil then return "Asking the server..." end
+    if s.state == 0 then return "Co-op starts are off on this server." end
+    if s.state == 2 then return "This character started |cffFFD100alone|r. It can't make or join a co-op party." end
+    if s.state == 3 then
+        return string.format("Co-op party |cffFFFF00%s|r - %d/%d players. Friends join with " ..
+            "|cffFFFF00.coop join %s|r or this tab (up to level %d).", s.code, s.members, s.maxSize, s.code, s.maxLevel)
+    end
+    if s.canChoose then
+        return "How does this character start? |cffFF6060You can only choose once.|r"
+    end
+    return "Not in a co-op party. " .. (s.why ~= "" and s.why or "")
+end
+
+UpdateGroup = function()
+    if not frame:IsShown() or currentTab ~= 2 then return end
+    groupStatus:SetText(StartText())
+    groupErrorText:SetText(groupError or "")
+
+    local choosing = start.canChoose and true or false
+    Shown(chooser, choosing)
+    if choosing then UIDropDownMenu_SetText(zoneMenu, ZoneName(chosenZone)) end
+    Shown(zoneMenu, #startZones > 0)
+    if waitingChoice then
+        aloneButton:Disable(); partyButton:Disable(); createButton:Disable(); joinButton:Disable()
+    else
+        aloneButton:Enable(); partyButton:Enable(); createButton:Enable(); joinButton:Enable()
+    end
+
+    partyTitle:ClearAllPoints()
+    local top = choosing and (partyBox:IsShown() and -46 - 150 or -46 - 70) or -50
+    partyTitle:SetPoint("TOPLEFT", 0, top)
+    local others = 0
+    for _, m in ipairs(party) do
+        if m.flags % 16 < 8 then others = others + 1 end
+    end
+    if others == 0 then
+        partyTitle:SetText("Your party |cff999999- you're not in a co-op party or a group yet.|r")
+    else
+        partyTitle:SetText("Your party")
+    end
+
+    for i = 1, PARTY_ROWS do
+        local row, m = partyRows[i], party[i]
+        if m then
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", partyTitle, "BOTTOMLEFT", 0, -6 - (i - 1) * 36)
+            local file = CLASS_FILES[m.cls]
+            local coords = file and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[file]
+            if coords then row.icon:SetTexCoord(unpack(coords)); row.icon:Show() else row.icon:Hide() end
+            row.icon:SetDesaturated(not m.online)
+            local color = file and RAID_CLASS_COLORS and RAID_CLASS_COLORS[file]
+            row.name:SetText(m.name)
+            if not m.online then
+                row.name:SetTextColor(0.5, 0.5, 0.5)
+            elseif color then
+                row.name:SetTextColor(color.r, color.g, color.b)
+            else
+                row.name:SetTextColor(1, 0.82, 0)
+            end
+            row.what:SetText(string.format("Level %d %s %s", m.level, RACE_NAMES[m.race] or "?",
+                CLASS_NAMES[m.cls] or "?"))
+            row.zone:SetText(m.online and (m.zone ~= "" and m.zone or "?") or "|cff999999Offline|r")
+            local tags = {}
+            for _, tag in ipairs(ROW_TAGS) do
+                if m.flags % (tag[1] * 2) >= tag[1] then table.insert(tags, tag[2]) end
+            end
+            if m.flags % 4 >= 2 then table.insert(tags, "Co-op") end
+            if m.flags % 8 >= 4 then table.insert(tags, "Group") end
+            row.tags:SetText(table.concat(tags, ", "))
+            row.roll:SetText(m.roll ~= "" and ("Roll: " .. m.roll) or (m.online and "|cff999999No roll|r" or ""))
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+    partyMore:ClearAllPoints()
+    partyMore:SetPoint("TOPLEFT", partyTitle, "BOTTOMLEFT", 0, -6 - PARTY_ROWS * 36)
+    partyMore:SetText(#party > PARTY_ROWS and ("and " .. (#party - PARTY_ROWS) .. " more") or "")
+end
+
+RequestGroup = function()
+    Send("START")
+    Send("PARTY")
+    UpdateGroup()
+end
+
+-- Tabs under the window
+local tabs = {}
+local function SelectTab(index)
+    currentTab = index
+    PanelTemplates_SetTab(frame, index)
+    for _, widget in ipairs(achWidgets) do widget:Hide() end
+    if index == 1 then
+        groupPanel:Hide()
+        scroll:Show(); whoLabel:Show(); summary:Show()
+        title:SetText("Randomizer Achievements")
+        if defsLoaded then Request(viewing) end
+        Redraw()
+    else
+        groupPanel:Show()
+        title:SetText("Randomizer - Group")
+        RequestGroup()
+    end
+end
+
+for index, text in ipairs({ "Achievements", "Group" }) do
+    local tab = CreateFrame("Button", "RandomizerAchievementsFrameTab" .. index, frame,
+        "CharacterFrameTabButtonTemplate")
+    tab:SetID(index)
+    tab:SetText(text)
+    if index == 1 then
+        tab:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 16, 8)
+    else
+        tab:SetPoint("LEFT", tabs[index - 1], "RIGHT", -14, 0)
+    end
+    tab:SetScript("OnClick", function() SelectTab(index) end)
+    tabs[index] = tab
+end
+PanelTemplates_SetNumTabs(frame, #tabs)
+PanelTemplates_SetTab(frame, 1)
+
+-- G / Z / M / E START / E PARTY from the server; true when it was one of them
+local function OnGroupMessage(parts)
+    local kind = parts[1]
+    if kind == "G" then
+        start.state = tonumber(parts[2]) or 0
+        start.code = parts[3] or ""
+        start.members = tonumber(parts[4]) or 0
+        start.maxSize = tonumber(parts[5]) or 5
+        start.maxLevel = tonumber(parts[6]) or 1
+        start.canChoose = parts[7] == "1"
+        start.why = parts[8] or ""
+        startZonesIncoming = {}
+        return true
+    elseif kind == "Z" then
+        table.insert(startZonesIncoming, { id = tonumber(parts[2]) or 0, name = parts[3] or "?" })
+        return true
+    elseif kind == "M" then
+        table.insert(partyIncoming, { name = parts[2] or "?", online = parts[3] == "1",
+            level = tonumber(parts[4]) or 0, race = tonumber(parts[5]) or 0, cls = tonumber(parts[6]) or 0,
+            zone = parts[7] or "", flags = tonumber(parts[8]) or 0, roll = parts[9] or "" })
+        return true
+    elseif kind == "E" and parts[2] == "START" then
+        startZones = startZonesIncoming
+        if waitingChoice then
+            waitingChoice = nil
+            Send("PARTY") -- a new party, or a new member: show it
+        end
+        -- Not chosen yet: the chooser opens by itself once per session
+        if start.canChoose and not startPrompted then
+            startPrompted = true
+            Print("This character hasn't chosen how it starts: alone or with a co-op party (the Group tab).")
+            frame:Show()
+            SelectTab(2)
+        end
+        UpdateGroup()
+        return true
+    elseif kind == "E" and parts[2] == "PARTY" then
+        party = partyIncoming
+        partyIncoming = {}
+        UpdateGroup()
+        return true
+    elseif kind == "X" and waitingChoice then
+        groupError = parts[2] or ""
+        Print(groupError)
+        return true
+    end
+    return false
+end
+
 local function OnMessage(message)
     local parts = Split(message, "\t")
     local kind = parts[1]
     available = true
-    if OnRollMessage(parts) then return end
+    if OnRollMessage(parts) or OnGroupMessage(parts) then return end
 
     if kind == "V" then
         serverVersion = tonumber(parts[2])
@@ -697,18 +1057,18 @@ events:SetScript("OnEvent", function(self, event, prefix, message, channel, send
     elseif event == "PLAYER_LOGIN" then
         viewing = UnitName("player")
         loginDelay = 3 -- seconds, so the server has finished logging us in
-    else
-        if frame:IsShown() then UpdateMembers() end
+    elseif frame:IsShown() then
+        if currentTab == 2 then Send("PARTY") else UpdateMembers() end
     end
 end)
 
 events:SetScript("OnUpdate", function(self, elapsed)
     -- Progress changes while you play: the open window asks again every few seconds
-    if frame:IsShown() and available and not achievementsOff then
+    if frame:IsShown() and available and (currentTab == 2 or not achievementsOff) then
         autoRefresh = autoRefresh - elapsed
         if autoRefresh <= 0 then
             autoRefresh = 5
-            Request(viewing)
+            if currentTab == 2 then Send("PARTY") else Request(viewing) end
         end
     end
 
@@ -718,6 +1078,7 @@ events:SetScript("OnUpdate", function(self, elapsed)
             loginDelay = nil
             replyTimeout = 10
             Send("DEF\t" .. ADDON_VERSION)
+            Send("START") -- not chosen yet: the Group tab opens with the chooser
         end
     elseif replyTimeout then
         if available then
@@ -736,8 +1097,8 @@ end)
 frame:SetScript("OnShow", function()
     if available == false then frame:Hide() return end
     autoRefresh = 5
-    if defsLoaded then Request(viewing) else Send("DEF\t" .. ADDON_VERSION) end
-    Redraw()
+    if not defsLoaded then Send("DEF\t" .. ADDON_VERSION) end
+    SelectTab(currentTab)
 end)
 
 SLASH_RANDACH1 = "/randach"
@@ -752,10 +1113,13 @@ SlashCmdList["RANDACH"] = function(arg)
     end
     if arg:lower() == "roll" then
         if rollFrame:IsShown() then rollFrame:Hide() else rollFrame:Show() end
+    elseif arg:lower() == "group" then
+        frame:Show()
+        SelectTab(2)
     elseif arg ~= "" then
         viewing = arg:sub(1, 1):upper() .. arg:sub(2):lower()
         frame:Show()
-        Request(viewing)
+        SelectTab(1)
     elseif frame:IsShown() then
         frame:Hide()
     else
@@ -770,8 +1134,9 @@ local UI_ICON = "Interface\\Icons\\Achievement_General"
 local UI_DEFAULT_ANGLE = 200
 local UI_CLICK_TEXT = "open the achievements"
 local UI_HELP = "Account-wide achievements of mod-world-randomizer, with their rewards, for you and your group.\n\n" ..
-    "/randach - show or hide the window\n/randach <name> - a group member's achievements\n/randach roll - tie " ..
-    "this character to its roll from the roller page\n.rach - your rewards in chat\n\nThe window updates by " ..
+    "/randach - show or hide the window\n/randach <name> - a group member's achievements\n/randach group - " ..
+    "start alone or with a co-op party, and your party's info\n/randach roll - tie this character to its roll " ..
+    "from the roller page\n.rach - your rewards in chat\n\nThe window updates by " ..
     "itself every few seconds while it is open."
 local function UI_DB()
     RandomizerAchievementsDB = RandomizerAchievementsDB or {}

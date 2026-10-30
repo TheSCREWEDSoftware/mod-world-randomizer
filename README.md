@@ -49,7 +49,8 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   `.randomizer roll clear <name>`.
 
 - **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
-  `.coop join <code>` and start in the same place, in the leader's group.
+  `.coop join <code>` and start in the same place, in the leader's group. The addon's Group tab does the same with
+  buttons, and can also start a character alone for good (it can't make or join a party afterwards).
 
 - **Achievements**: 144 account-wide achievements (levels, zones, quests, gold, HP, deaths, rares, weapon skills,
   professions, specializations...) whose rewards count on every character of the account. See below.
@@ -240,6 +241,11 @@ the next login. The addon and the module share a version number (`ADDON_VERSION`
 `RANDOMIZER_ADDON_VERSION` in `src/WorldRandomizerAchievements.h`); a player with another version is told in chat to
 update. A minimap button (drag it around; right-click for options) opens it, and the addon has a page in
 Interface > AddOns (minimap button on / off). The open window updates by itself every few seconds.
+
+The window's **Group** tab (`/randach group`) is the co-op start in buttons: **Start alone** or **Start with a party**
+(make one, with a random start zone or one you pick, or join one with its 6 letter code). Each choice asks first and
+can't be redone. A character that hasn't chosen yet (and may still join a party) gets the tab opened at login. Below,
+your party: everyone in your co-op party and your group, online or not, with level, race and class, zone and roll.
 
 ## About the stats eras
 
