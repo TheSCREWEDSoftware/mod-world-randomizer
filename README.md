@@ -89,6 +89,11 @@ Plain HTML + JavaScript, no build step.
   characters for one player, 100 for a party of five) so they fit in the game's chat; older codes still load and
   "Paste an old code" converts them. Hardcore mode locks the first roll.
   Icons show their name on hover; "Show" switches to names.
+  Rules (top of the page) apply to everyone: faction rule, how many players may share a race / class / spec /
+  profession, bans (red slash), and Free pick or Draft (each player bans some races, classes, specs and
+  professions first, 1 of each by default). "Pick" opens a step by step character picker (faction, race with its
+  racials, class and spec with its role, professions with what they go with, confirm). Defaults live in
+  `web/roller-config.js`; "Save rules file" / "Load rules file" keep and share a rule set.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
 
@@ -228,7 +233,9 @@ buttons for each party / raid member to see their account's achievements and thi
 server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
 nothing is shown in chat. `/randach <name>` opens a group member directly. If the server doesn't answer within
 10 seconds of logging in (no module, `Randomizer.Enable = 0` or achievements off), the addon turns itself off until
-the next login. A minimap button (drag it around; right-click for options) opens it, and the addon has a page in
+the next login. The addon and the module share a version number (`ADDON_VERSION` in the addon,
+`RANDOMIZER_ADDON_VERSION` in `src/WorldRandomizerAchievements.h`); a player with another version is told in chat to
+update. A minimap button (drag it around; right-click for options) opens it, and the addon has a page in
 Interface > AddOns (minimap button on / off). The open window updates by itself every few seconds.
 
 ## About the stats eras

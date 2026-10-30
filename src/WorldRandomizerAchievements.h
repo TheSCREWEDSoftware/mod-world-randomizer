@@ -70,6 +70,9 @@ enum RandomizerAchReward : uint8
 //                     "E\tDEF\t<count>\t<expansion 1-3>" / "E\tGET\t<name>"   end of a reply;  "X\t<error>"
 //                     "L\t<level>"  first talent point level (Randomizer.Talents.StartLevel), before a DEF reply
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
+// Goes up whenever the addon and the module change together; the addon's ADDON_VERSION
+// (addon/RandomizerAchievements/RandomizerAchievements.lua) must match it
+constexpr uint32 RANDOMIZER_ADDON_VERSION = 2;
 
 class Player;
 // WorldRandomizerRoll.cpp: ROLL / ROLLPEEK / ROLLSET requests; true when it was one

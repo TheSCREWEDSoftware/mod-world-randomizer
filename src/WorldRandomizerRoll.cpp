@@ -1,10 +1,11 @@
 /*
  * mod-world-randomizer: characters tied to their roll from the web roller (web/index.html).
  *
- * The roller's codes (WR4.<base64url bits>) carry every player's race, class, spec and two professions. A player
- * types .randomizer roll <code> <player number> (or picks themself in the addon) and the character is tied to that
- * player's roll, for good: talents can only go into the rolled tree, and trainers won't teach other primary
- * professions. The race and class must match the roll. A GM can untie a character with .randomizer roll clear.
+ * The roller's codes (WR5.<base64url bits>, WR4. before) carry every player's race, class, spec and two
+ * professions. A player types .randomizer roll <code> <player number> (or picks themself in the addon) and the
+ * character is tied to that player's roll, for good: talents can only go into the rolled tree, and trainers won't
+ * teach other primary professions. The race and class must match the roll. A GM can untie a character with
+ * .randomizer roll clear.
  *
  * The decoder below reads the same bits roller.js writes (packedCode / writePlayer), in the same order.
  */
@@ -164,12 +165,13 @@ namespace
         bool _ok = true;
     };
 
-    // Every player of a WR4 code (party or character code); empty if it isn't one
+    // Every player of a WR4 / WR5 code (party or character code); empty if it isn't one
     std::vector<RolledPlayer> DecodeCode(std::string code)
     {
         std::vector<RolledPlayer> players;
-        if (code.compare(0, 4, "WR4.") != 0)
+        if (code.compare(0, 4, "WR4.") != 0 && code.compare(0, 4, "WR5.") != 0)
             return players;
+        uint32 version = code[2] == '5' ? 5 : 4;
 
         BitReader r(code.substr(4));
         bool party = r.Flag();
@@ -188,7 +190,24 @@ namespace
         uint32 count = 1;
         if (party)
         {
-            r.Get(2); r.Get(3); r.Get(2); r.Get(2); // faction rule, duplicates, profession duplicates, compatible
+            if (version == 4)
+            {
+                r.Get(2); r.Get(3); r.Get(2); r.Get(2); // faction rule, duplicates, profession duplicates, compatible
+            }
+            else
+            {
+                r.Get(2);  // faction rule
+                r.Get(24); // limits: race, class, spec, profession (6 bits each)
+                r.Get(1);  // profession slot rule
+                r.Get(2);  // compatible professions
+                r.Get(1);  // draft
+                r.Get(16); // draft bans per player (4 bits each)
+                if (r.Flag())
+                {
+                    r.Get(32); // bans: faction 2, race 10, class 10, spec 30, profession 11 = 63 bits
+                    r.Get(31);
+                }
+            }
             count = r.Get(6) + 1;
         }
 
@@ -233,6 +252,11 @@ namespace
             for (uint8 k = 0; k < COUNT_FIELDS && r.Ok(); ++k)
                 if (r.Flag())
                     r.Varint();
+
+            if (version >= 5 && r.Flag()) // draft bans: race, class, spec, profession
+                for (uint8 k = 0; k < 4 && r.Ok(); ++k)
+                    for (uint32 n = r.Get(4); n > 0 && r.Ok(); --n)
+                        r.Get(6);
 
             players.push_back(p);
         }
@@ -327,7 +351,7 @@ public:
 
         std::vector<RolledPlayer> players = DecodeCode(code);
         if (players.empty())
-            return "That is not a roller code (they start with WR4.). Copy it from the roller page.";
+            return "That is not a roller code (they start with WR5.). Copy it from the roller page.";
         if (number < 1 || number > players.size())
             return Acore::StringFormat("Pick a player from 1 to {}.", players.size());
 
@@ -611,7 +635,7 @@ bool HandleRandomizerRollCommand(ChatHandler* handler, Optional<std::string> cod
             std::vector<RolledPlayer> players = DecodeCode(*code);
             if (players.empty())
             {
-                handler->SendErrorMessage("That is not a roller code (they start with WR4.).");
+                handler->SendErrorMessage("That is not a roller code (they start with WR5.).");
                 return false;
             }
             for (std::size_t i = 0; i < players.size(); ++i)

@@ -59,6 +59,8 @@
         </select>
       </label>
       <button id="roll-all">Roll everyone</button>
+      <button class="quiet" data-act="pick" data-tip="Pick a character yourself, step by step: faction, race, class
+        and spec, professions">Pick characters</button>
       <button id="add-player" class="quiet">Add player</button>
       <button id="reset" class="quiet" data-tip="Every player keeps their name and preferences; their rolls (locked
         hardcore ones too) and reroll counts are cleared">Clear all rolls</button>
@@ -67,44 +69,35 @@
     <p id="msg" class="msg" style="margin:8px 0 0"></p>
   </section>
 
-  <section class="panel" id="party-rules-panel">
-    <h2>Co-op party</h2>
-    <p class="muted" style="margin-top:0">With two or more players these rules apply between them. In game, player 1
+  <section class="panel" id="rules-panel">
+    <h2>Rules</h2>
+    <p class="muted" style="margin-top:0">These apply to every player, over their own preferences. In game, player 1
       types <code>.coop create</code> and the others <code>.coop join</code> with the 6 letter code it gives, so you all
       start in the same place (one faction).</p>
     <div class="controls">
       <label class="field"><span>Faction <i class="info" data-tip="Same faction for everyone: player 1's preferences
           pick a faction every player allows, and everyone rolls in it (co-op in game needs one faction); no faction
-          rerolls. | Each player rolls
-          their own: every player's own faction preferences. | All different: no two players share a faction, so two
-          players at most.">i</i></span>
+          rerolls. | Each player rolls their own: every player's own faction preferences. | All different: no two
+          players share a faction, so two players at most.">i</i></span>
         <select id="rule-faction">
           <option value="same">Same faction for everyone</option>
           <option value="free">Each player rolls their own</option>
           <option value="different">All different (2 players at most)</option>
         </select>
       </label>
-      <div class="field"><span>May be the same for two players <i class="info" data-tip="Ticked: two players may roll
-          the same race / class / spec. | Unticked: each one appears once in the party, so with Class unticked a party
-          of
-          five has five different classes. | Spec only matters between players of the same class.">i</i></span>
-        <div class="checks" style="padding:6px 0">
-          <label class="check"><input type="checkbox" id="dup-race"> Race</label>
-          <label class="check"><input type="checkbox" id="dup-class"> Class</label>
-          <label class="check"><input type="checkbox" id="dup-spec"> Spec (same class)</label>
+      <div class="field"><span>At most this many players with the same <i class="info" data-tip="0 = no limit. | 1 =
+          each one appears once in the party: Class 1 gives a party of five five different classes. | Spec counts
+          players of the same class and spec. | Profession counts both slots.">i</i></span>
+        <div class="checks limits" style="padding:2px 0">
+          <label class="check">Race <input type="number" min="0" max="40" id="limit-race"></label>
+          <label class="check">Class <input type="number" min="0" max="40" id="limit-class"></label>
+          <label class="check">Spec <input type="number" min="0" max="40" id="limit-spec"></label>
+          <label class="check">Profession <input type="number" min="0" max="40" id="limit-prof"></label>
         </div>
       </div>
-      <label class="field"><span>Professions <i class="info" data-tip="Duplicates allowed: any player may roll any
-          profession, even one someone else has. | Not in the same slot: two players can't share their Profession 1, nor
-          their Profession 2, but one player's Profession 1 may be another's Profession 2 (Mining + Alchemy next to
-          Herbalism + Mining is fine). | Never twice in the party: each profession appears once in the whole party, in
-          either slot.">i</i></span>
-        <select id="dup-prof">
-          <option value="yes">Duplicates allowed</option>
-          <option value="slot">Not in the same slot (Profession 1 / 2)</option>
-          <option value="no">Never twice in the party</option>
-        </select>
-      </label>
+      <label class="check" style="align-self:center"><input type="checkbox" id="prof-slot"> A profession can't be in
+        the same slot for two players <i class="info" data-tip="Two players can't share their Profession 1, nor their
+          Profession 2, but one player's Profession 1 may be another's Profession 2.">i</i></label>
       <label class="field"><span>Compatible professions <i class="info" data-tip="Off: the two professions are rolled
           freely. | Each player's two go together: every player gets a pair that works on one character: a gathering
           profession with the crafting one it supplies (Skinning + Leatherworking, Mining + Blacksmithing / Engineering
@@ -119,6 +112,34 @@
         </select>
       </label>
     </div>
+    <div class="controls" style="margin-top:12px">
+      <label class="field"><span>Picking <i class="info" data-tip="Free pick: everyone picks (or rolls) from whatever
+          the rules allow. | Draft: in the character picker each player first bans up to this many races, classes,
+          specs and professions, for everyone; random rolls respect those bans too.">i</i></span>
+        <select id="rule-pick">
+          <option value="free">Free pick</option>
+          <option value="draft">Draft (each player bans some first)</option>
+        </select>
+      </label>
+      <div class="field" id="draft-box"><span>Bans per player in the draft</span>
+        <div class="checks limits" style="padding:2px 0">
+          <label class="check">Races <input type="number" min="0" max="15" id="draft-race"></label>
+          <label class="check">Classes <input type="number" min="0" max="15" id="draft-cls"></label>
+          <label class="check">Specs <input type="number" min="0" max="15" id="draft-spec"></label>
+          <label class="check">Professions <input type="number" min="0" max="15" id="draft-prof"></label>
+        </div>
+      </div>
+      <span class="spacer" style="flex:1"></span>
+      <button class="quiet" id="rules-save" data-tip="Download these rules as a file (roller-rules.json) to keep or
+        share">Save rules file</button>
+      <label class="quiet filebtn" data-tip="Load rules from a saved file">Load rules file
+        <input type="file" id="rules-load" accept=".json,application/json" hidden></label>
+      <button class="quiet" id="rules-default" data-tip="Back to the rules in roller-config.js">Default rules</button>
+    </div>
+    <div class="cathead" style="margin-top:14px"><b>Banned</b><span class="muted small">Click to ban (red slash) or
+      allow again. Nobody can roll or pick a banned faction, race, class, spec or profession.</span>
+      <button class="quiet small-btn" data-act="unban">Allow everything</button></div>
+    <div id="bans"></div>
   </section>
 
   <section class="panel">
@@ -176,14 +197,16 @@
   </section>
 
   <section class="panel">
-    <h2 id="prefs-title">Preferences</h2>
+    <h2 id="prefs-title">Advanced preferences</h2>
     <div id="prefs-tabs" class="tabs"></div>
     <div id="prefs"></div>
   </section>
 </main>
 
 <div class="tooltip" id="tip"></div>
+<div class="wizard-back" id="wizard"></div>
 
+<script src="roller-config.js"></script>
 <script src="zones.js"></script>
 <script src="randomizer.js"></script>
 <script src="roller.js"></script>

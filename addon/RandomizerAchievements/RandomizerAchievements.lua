@@ -7,6 +7,8 @@
 -- /randach <name>     show a group member's achievements
 
 local PREFIX = "RANDACH"
+local ADDON_VERSION = 2   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
+local serverVersion      -- what the module expects, from its "V" reply
 local ROW_HEIGHT = 50
 local ROWS = 8
 
@@ -468,7 +470,7 @@ end
 
 local codeLabel = rollFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 codeLabel:SetPoint("TOPLEFT", 24, -142)
-codeLabel:SetText("Party or player code from the roller page (WR4....):")
+codeLabel:SetText("Party or player code from the roller page (WR5....):")
 
 local codeBox = CreateFrame("EditBox", "RandomizerRollCode", rollFrame, "InputBoxTemplate")
 codeBox:SetWidth(320); codeBox:SetHeight(20)
@@ -594,7 +596,7 @@ local function OnRollMessage(parts)
             cls = tonumber(parts[5]) or 0, text = parts[6] or "" })
         return true
     elseif kind == "E" and parts[2] == "PEEK" then
-        if #peek == 0 then Print("That is not a roller code (they start with WR4.).") end
+        if #peek == 0 then Print("That is not a roller code (they start with WR5.).") end
         if rollFrame:IsShown() then UpdateRoll() end
         return true
     end
@@ -607,7 +609,9 @@ local function OnMessage(message)
     available = true
     if OnRollMessage(parts) then return end
 
-    if kind == "L" then
+    if kind == "V" then
+        serverVersion = tonumber(parts[2])
+    elseif kind == "L" then
         -- The server gives talent points before level 10: open the talent frame from that level
         local level = tonumber(parts[2])
         if level and level >= 1 and level < 10 then
@@ -713,7 +717,7 @@ events:SetScript("OnUpdate", function(self, elapsed)
         if loginDelay <= 0 then
             loginDelay = nil
             replyTimeout = 10
-            Send("DEF")
+            Send("DEF\t" .. ADDON_VERSION)
         end
     elseif replyTimeout then
         if available then
@@ -732,7 +736,7 @@ end)
 frame:SetScript("OnShow", function()
     if available == false then frame:Hide() return end
     autoRefresh = 5
-    if defsLoaded then Request(viewing) else Send("DEF") end
+    if defsLoaded then Request(viewing) else Send("DEF\t" .. ADDON_VERSION) end
     Redraw()
 end)
 
@@ -774,7 +778,14 @@ local function UI_DB()
     return RandomizerAchievementsDB
 end
 local function UI_STATUS()
-    if available then return "|cff4CFF00Connected:|r the server runs the World Randomizer achievements." end
+    if available then
+        local versionText = " Addon version " .. ADDON_VERSION .. "."
+        if serverVersion and serverVersion ~= ADDON_VERSION then
+            versionText = " |cffFF6060Addon version " .. ADDON_VERSION .. ", the server expects " .. serverVersion ..
+                ": update the addon.|r"
+        end
+        return "|cff4CFF00Connected:|r the server runs the World Randomizer." .. versionText
+    end
     if available == false then
         return "|cffFF6060Not available:|r this server doesn't run the World Randomizer achievements (off until " ..
             "your next login)."

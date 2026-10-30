@@ -63,6 +63,49 @@
     { name: 'Tailoring' }
   ];
 
+  // What each spec does in a group
+  var SPEC_ROLES = {
+    1: ['Melee DPS', 'Melee DPS', 'Tank'], 2: ['Healer', 'Tank', 'Melee DPS'],
+    3: ['Ranged DPS', 'Ranged DPS', 'Ranged DPS'], 4: ['Melee DPS', 'Melee DPS', 'Melee DPS'],
+    5: ['Healer', 'Healer', 'Ranged DPS'], 6: ['Tank', 'Tank / Melee DPS', 'Melee DPS'],
+    7: ['Ranged DPS', 'Melee DPS', 'Healer'], 8: ['Ranged DPS', 'Ranged DPS', 'Ranged DPS'],
+    9: ['Ranged DPS', 'Ranged DPS', 'Ranged DPS'], 11: ['Ranged DPS', 'Melee DPS / Tank', 'Healer']
+  };
+
+  // A few racials of each race (Wrath), with their icons (img/racial)
+  var RACIALS = {
+    1: [['Every Man for Himself', 'spell_shadow_charm', 'Breaks out of stuns and fear'],
+      ['Diplomacy', 'inv_misc_note_02', '10% more reputation'],
+      ['The Human Spirit', 'inv_enchant_shardbrilliantsmall', '3% more Spirit']],
+    2: [['Blood Fury', 'racial_orc_berserkerstrength', 'Attack power and spell power for 15 sec'],
+      ['Hardiness', 'inv_helmet_23', 'Stuns last 15% shorter'],
+      ['Axe Specialization', 'inv_axe_02', 'Expertise with axes and fist weapons']],
+    3: [['Stoneform', 'spell_shadow_unholystrength', 'Removes poison, disease and bleeding; 10% armor'],
+      ['Gun Specialization', 'inv_musket_03', '1% more crit with guns'],
+      ['Frost Resistance', 'spell_frost_wizardmark', '+10 Frost resistance']],
+    4: [['Shadowmeld', 'ability_ambush', 'Vanish while standing still'],
+      ['Nature Resistance', 'spell_nature_spiritarmor', '+10 Nature resistance'],
+      ['Wisp Spirit', 'spell_nature_wispsplode', 'A fast wisp when dead']],
+    5: [['Will of the Forsaken', 'spell_shadow_raisedead', 'Breaks charm, fear and sleep'],
+      ['Cannibalize', 'ability_racial_cannibalize', 'Eat corpses to heal'],
+      ['Underwater Breathing', 'spell_shadow_demonbreath', 'Breathe under water much longer']],
+    6: [['War Stomp', 'ability_warstomp', 'Stuns nearby enemies'],
+      ['Endurance', 'spell_nature_unyeildingstamina', '5% more base health'],
+      ['Cultivation', 'inv_misc_flower_01', 'Herbalism +15, gathers faster']],
+    7: [['Escape Artist', 'ability_rogue_trip', 'Breaks out of roots and snares'],
+      ['Expansive Mind', 'inv_enchant_essenceeternallarge', '5% more Intellect'],
+      ['Engineering Specialization', 'inv_misc_gear_01', 'Engineering +15']],
+    8: [['Berserking', 'racial_troll_berserk', '20% faster attacks and casting'],
+      ['Regeneration', 'spell_nature_regenerate', 'Health regenerates in combat'],
+      ['Beast Slaying', 'inv_misc_pelt_bear_ruin_02', '5% more damage to beasts']],
+    10: [['Arcane Torrent', 'spell_shadow_teleport', 'Silences nearby enemies, restores power'],
+      ['Magic Resistance', 'spell_shadow_antimagicshell', '+5 resistance to every school'],
+      ['Arcane Affinity', 'spell_holy_magicalsentry', 'Enchanting +10']],
+    11: [['Gift of the Naaru', 'spell_holy_holyprotection', 'Heals over 15 sec'],
+      ['Heroic Presence', 'inv_helmet_21', '1% hit for the party'],
+      ['Shadow Resistance', 'spell_shadow_antishadow', '+10 Shadow resistance']]
+  };
+
   // Two professions that go together on one character: a gatherer and what it feeds, and Tailoring + Enchanting
   function professionsGoTogether(a, b) {
     var pa = PROFESSIONS[a];
@@ -106,6 +149,9 @@
     prof2: PROFESSIONS.map(function (p, i) { return String(i); })
   };
   KEYS['class'].forEach(function (c) { [0, 1, 2].forEach(function (i) { KEYS.spec.push(c + '-' + i); }); });
+  // Ban lists: rules key, KEYS list
+  var DRAFT_KEYS = { race: KEYS.race, cls: KEYS['class'], spec: KEYS.spec, prof: KEYS.prof1 };
+  var BAN_CATS = [['faction', 'faction'], ['race', 'race'], ['cls', 'class'], ['spec', 'spec'], ['prof', 'prof1']];
 
   function since(cat, key) {
     if (cat === 'race') return RACES[key].since;
@@ -170,6 +216,11 @@
     return settings;
   }
 
+  // A player's draft bans (rules.pick 'draft'): keys they banned for everyone
+  function emptyDraft() {
+    return { race: [], cls: [], spec: [], prof: [] };
+  }
+
   function zeroCounts() {
     var counts = { trade: 0 };
     COUNT_KEYS.forEach(function (key) { counts[key] = 0; });
@@ -177,13 +228,65 @@
   }
 
   function newPlayer(number) {
-    return { name: 'Player ' + number, settings: defaultSettings(), roll: null, counts: zeroCounts(), decks: {} };
+    return { name: 'Player ' + number, settings: defaultSettings(), roll: null, counts: zeroCounts(), decks: {},
+      draft: emptyDraft() };
+  }
+
+  // Rules over every player: the faction rule, how many players may share a race / class / spec / profession
+  // (0 = any), professions per slot, compatible professions, and what is banned outright
+  var CONFIG = window.RANDOMIZER_ROLLER_CONFIG || {};
+  var DRAFT_CATS = ['race', 'cls', 'spec', 'prof'];
+
+  // The rules everyone starts from: roller-config.js, or these
+  function defaultRules() {
+    var rules = {
+      faction: 'same', limit: { race: 0, cls: 1, spec: 0, prof: 0 }, profSlot: false, compat: 'off',
+      pick: 'free', draft: { race: 1, cls: 1, spec: 1, prof: 1 },
+      ban: { faction: {}, race: {}, cls: {}, spec: {}, prof: {} }
+    };
+    var c = CONFIG.rules;
+    if (!c) return rules;
+    if (['same', 'free', 'different'].indexOf(c.faction) >= 0) rules.faction = c.faction;
+    if (['off', 'player', 'party'].indexOf(c.compat) >= 0) rules.compat = c.compat;
+    if (['free', 'draft'].indexOf(c.pick) >= 0) rules.pick = c.pick;
+    rules.profSlot = !!c.profSlot;
+    DRAFT_CATS.forEach(function (k) {
+      if (c.limit && c.limit[k] !== undefined) rules.limit[k] = Math.max(0, Math.min(40, Number(c.limit[k]) || 0));
+      if (c.draft && c.draft[k] !== undefined) rules.draft[k] = Math.max(0, Math.min(15, Number(c.draft[k]) || 0));
+    });
+    Object.keys(rules.ban).forEach(function (k) {
+      ((c.ban && c.ban[k]) || []).forEach(function (key) { rules.ban[k][String(key)] = true; });
+    });
+    return rules;
+  }
+
+  // Rules saved by earlier versions of the page (duplicate switches instead of limits)
+  function normalizeRules(r) {
+    var rules = defaultRules();
+    if (!r) return rules;
+    rules.faction = r.faction || 'same';
+    rules.compat = r.compat || 'off';
+    if (r.limit) {
+      Object.keys(rules.limit).forEach(function (k) { rules.limit[k] = Math.max(0, Number(r.limit[k]) || 0); });
+    } else {
+      rules.limit.race = r.dupRace === false ? 1 : 0;
+      rules.limit.cls = r.dupClass === true ? 0 : 1;
+      rules.limit.spec = r.dupSpec === false ? 1 : 0;
+      rules.limit.prof = r.profDup === 'no' ? 1 : 0;
+    }
+    rules.profSlot = r.profSlot !== undefined ? !!r.profSlot : r.profDup === 'slot';
+    if (r.pick === 'free' || r.pick === 'draft') rules.pick = r.pick;
+    if (r.draft) DRAFT_CATS.forEach(function (k) { rules.draft[k] = Math.max(0, Number(r.draft[k]) || 0); });
+    if (r.ban) Object.keys(rules.ban).forEach(function (k) { rules.ban[k] = Object.assign({}, r.ban[k] || {}); });
+    return rules;
   }
 
   function defaultState() {
     return {
-      v: 3, era: 'wrath', hardcore: true, display: 'icons', tab: 0,
-      party: { faction: 'same', dupRace: true, dupClass: false, dupSpec: true, profDup: 'yes', compat: 'off' },
+      v: 3, era: ERAS.indexOf(CONFIG.era) >= 0 ? CONFIG.era : 'wrath',
+      hardcore: CONFIG.hardcore === undefined ? true : !!CONFIG.hardcore,
+      display: ['icons', 'both', 'names'].indexOf(CONFIG.display) >= 0 ? CONFIG.display : 'icons', tab: 0,
+      party: defaultRules(),
       players: [newPlayer(1)]
     };
   }
@@ -210,6 +313,9 @@
     p.counts = Object.assign(zeroCounts(), p.counts || {});
     p.decks = p.decks || {};
     p.roll = p.roll || null;
+    var draft = emptyDraft();
+    DRAFT_CATS.forEach(function (k) { draft[k] = ((p.draft && p.draft[k]) || []).map(String); });
+    p.draft = draft;
     return p;
   }
 
@@ -229,8 +335,7 @@
         }
       } catch (e) { /* storage blocked */ }
     }
-    var fresh = defaultState();
-    state.party = Object.assign(fresh.party, state.party || {});
+    state.party = normalizeRules(state.party);
     state.players.forEach(function (p, i) { normalizePlayer(p, i + 1); });
     state.players.forEach(function (p, i) { if (/^Player \d+$/.test(p.name)) p.name = 'Player ' + (i + 1); });
     if (ERAS.indexOf(state.era) < 0) state.era = 'wrath';
@@ -257,7 +362,30 @@
 
   // ---- Drawing one thing ----
 
+  // Banned by the rules (or its faction / class is)
+  function banned(cat, key) {
+    var ban = state.party.ban;
+    if (cat === 'faction') return !!ban.faction[key];
+    if (cat === 'race') return !!ban.race[key] || !!ban.faction[RACES[key].faction] || !!draftedBy('race', key);
+    if (cat === 'class') return !!ban.cls[key] || !!draftedBy('cls', key);
+    if (cat === 'spec') {
+      var cls = key.split('-')[0];
+      return !!ban.spec[key] || !!ban.cls[cls] || !!draftedBy('spec', key) || !!draftedBy('cls', cls);
+    }
+    return !!ban.prof[key] || !!draftedBy('prof', key);
+  }
+
+  // The player who banned it in the draft, or null
+  function draftedBy(dcat, key) {
+    if (state.party.pick !== 'draft') return null;
+    for (var i = 0; i < state.players.length; i++) {
+      if (state.players[i].draft[dcat].indexOf(String(key)) >= 0) return state.players[i];
+    }
+    return null;
+  }
+
   function isAllowed(p, cat, key) {
+    if (banned(cat, key)) return false;
     var s = p.settings.cats[cat];
     if (s.mode === 'pick') return s.pick === key;
     if (!s.allow[key]) return false;
@@ -323,18 +451,30 @@
     var ctx = blankContext();
     if (state.players.length < 2) return ctx;
     var rules = state.party;
+    var counts = { race: {}, cls: {}, spec: {}, prof: {} };
     state.players.forEach(function (q, j) {
       if (j === index || !q.roll) return;
       var faction = RACES[q.roll.race].faction;
       if (rules.faction === 'same' && !ctx.faction) ctx.faction = faction;
       if (rules.faction === 'different') ctx.notFaction[faction] = true;
-      if (!rules.dupRace) ctx.race[q.roll.race] = true;
-      if (!rules.dupClass) ctx.cls[q.roll.cls] = true;
-      if (!rules.dupSpec && q.roll.spec >= 0) ctx.spec[q.roll.cls + '-' + q.roll.spec] = true;
+      counts.race[q.roll.race] = (counts.race[q.roll.race] || 0) + 1;
+      counts.cls[q.roll.cls] = (counts.cls[q.roll.cls] || 0) + 1;
+      if (q.roll.spec >= 0) {
+        var specKey = q.roll.cls + '-' + q.roll.spec;
+        counts.spec[specKey] = (counts.spec[specKey] || 0) + 1;
+      }
       q.roll.profs.forEach(function (prof, slot) {
         if (prof < 0) return;
-        if (rules.profDup === 'slot') ctx['prof' + (slot + 1)][prof] = true;
-        if (rules.profDup === 'no') ctx.profAny[prof] = true;
+        if (rules.profSlot) ctx['prof' + (slot + 1)][prof] = true;
+        counts.prof[prof] = (counts.prof[prof] || 0) + 1;
+      });
+    });
+    // Full: as many players as the limit allows already have it
+    [['race', 'race'], ['cls', 'cls'], ['spec', 'spec'], ['prof', 'profAny']].forEach(function (pair) {
+      var limit = rules.limit[pair[0]];
+      if (!limit) return;
+      Object.keys(counts[pair[0]]).forEach(function (key) {
+        if (counts[pair[0]][key] >= limit) ctx[pair[1]][key] = true;
       });
     });
     return ctx;
@@ -990,9 +1130,20 @@
       w.flag(p.counts[key] > 0);
       if (p.counts[key] > 0) w.varint(p.counts[key]);
     });
+
+    // Draft bans (WR5)
+    var drafted = DRAFT_CATS.some(function (k) { return p.draft[k].length > 0; });
+    w.flag(drafted);
+    if (drafted) {
+      DRAFT_CATS.forEach(function (k) {
+        var list = p.draft[k].filter(function (key) { return DRAFT_KEYS[k].indexOf(key) >= 0; }).slice(0, 15);
+        w.put(list.length, 4);
+        list.forEach(function (key) { w.put(DRAFT_KEYS[k].indexOf(key), 6); });
+      });
+    }
   }
 
-  function readPlayer(r, index) {
+  function readPlayer(r, index, version) {
     var p = newPlayer(index + 1);
     if (!r.flag()) p.name = r.text().slice(0, 24) || p.name;
 
@@ -1025,6 +1176,14 @@
     }
 
     COUNT_KEYS.concat('trade').forEach(function (key) { p.counts[key] = r.flag() ? r.varint() : 0; });
+    if (version >= 5 && r.flag()) {
+      DRAFT_CATS.forEach(function (k) {
+        for (var n = r.get(4); n > 0; n--) {
+          var key = DRAFT_KEYS[k][r.get(6)];
+          if (key) p.draft[k].push(key);
+        }
+      });
+    }
     return normalizePlayer(p, index + 1);
   }
 
@@ -1037,32 +1196,53 @@
     if (party) {
       var rules = state.party;
       w.put(['same', 'free', 'different'].indexOf(rules.faction), 2);
-      w.flag(rules.dupRace);
-      w.flag(rules.dupClass);
-      w.flag(rules.dupSpec);
-      w.put(['yes', 'slot', 'no'].indexOf(rules.profDup), 2);
+      ['race', 'cls', 'spec', 'prof'].forEach(function (k) { w.put(Math.min(63, rules.limit[k]), 6); });
+      w.flag(rules.profSlot);
       w.put(['off', 'player', 'party'].indexOf(rules.compat), 2);
+      var anyBan = BAN_CATS.some(function (b) { return Object.keys(rules.ban[b[0]]).some(function (k) {
+        return rules.ban[b[0]][k]; }); });
+      w.flag(rules.pick === 'draft');
+      DRAFT_CATS.forEach(function (k) { w.put(Math.min(15, rules.draft[k]), 4); });
+      w.flag(anyBan);
+      if (anyBan) {
+        BAN_CATS.forEach(function (b) {
+          KEYS[b[1]].forEach(function (key) { w.flag(!!rules.ban[b[0]][key]); });
+        });
+      }
       w.put(players.length - 1, 6);
     }
     players.forEach(function (p) { writePlayer(w, p, party ? state.players.indexOf(p) : 0); });
-    return 'WR4.' + w.toString();
+    return 'WR5.' + w.toString();
   }
 
-  function readPackedCode(text) {
+  function readPackedCode(text, version) {
     var r = new BitReader(text);
     var party = r.flag();
     var out = { era: ERAS[r.get(2)] || 'wrath', hardcore: r.flag(), rules: null, players: [] };
     out.world = readWorld(r);
     var count = 1;
     if (party) {
-      out.rules = {
-        faction: ['same', 'free', 'different'][r.get(2)] || 'same', dupRace: r.flag(), dupClass: r.flag(),
-        dupSpec: r.flag(), profDup: ['yes', 'slot', 'no'][r.get(2)] || 'yes',
-        compat: ['off', 'player', 'party'][r.get(2)] || 'off'
-      };
+      if (version === 4) {
+        out.rules = normalizeRules({
+          faction: ['same', 'free', 'different'][r.get(2)] || 'same', dupRace: r.flag(), dupClass: r.flag(),
+          dupSpec: r.flag(), profDup: ['yes', 'slot', 'no'][r.get(2)] || 'yes',
+          compat: ['off', 'player', 'party'][r.get(2)] || 'off'
+        });
+      } else {
+        var rules = defaultRules();
+        rules.faction = ['same', 'free', 'different'][r.get(2)] || 'same';
+        ['race', 'cls', 'spec', 'prof'].forEach(function (k) { rules.limit[k] = r.get(6); });
+        rules.profSlot = r.flag();
+        rules.compat = ['off', 'player', 'party'][r.get(2)] || 'off';
+        rules.pick = r.flag() ? 'draft' : 'free';
+        DRAFT_CATS.forEach(function (k) { rules.draft[k] = r.get(4); });
+        if (r.flag()) BAN_CATS.forEach(function (b) { KEYS[b[1]].forEach(function (key) {
+          if (r.flag()) rules.ban[b[0]][key] = true; }); });
+        out.rules = rules;
+      }
       count = r.get(6) + 1;
     }
-    for (var i = 0; i < count; i++) out.players.push(readPlayer(r, i));
+    for (var i = 0; i < count; i++) out.players.push(readPlayer(r, i, version));
     return out;
   }
 
@@ -1117,11 +1297,11 @@
   }
 
   function decodeRules(data) {
-    return {
+    return normalizeRules({
       faction: ['same', 'free', 'different'][data[0]] || 'same', dupRace: !!data[1], dupClass: !!data[2],
       dupSpec: !!data[3], profDup: ['yes', 'slot', 'no'][data[4]] || 'yes',
       compat: ['off', 'player', 'party'][data[5]] || 'off'
-    };
+    });
   }
 
   function characterCode(p) {
@@ -1152,7 +1332,7 @@
   function decodeCode(code) {
     code = code.trim();
     var data;
-    if (/^WR4\./.test(code)) return readPackedCode(code.slice(4));
+    if (/^WR[45]\./.test(code)) return readPackedCode(code.slice(4), Number(code.charAt(2)));
     if (/^WR[CP]3\./.test(code)) {
       data = JSON.parse(fromBase64(code.slice(5)));
       if (code.charAt(2) === 'C') {
@@ -1230,10 +1410,12 @@
     var count = p.counts[cat] || 0;
     return '<div class="tile' + (name ? '' : ' empty') + '"><div class="label">' + label + '</div>' +
       (showIcons() ? '<div class="tile-ic">' + (iconHtml || '<span class="ic blank"></span>') + '</div>' : '') +
-      ((showNames() || !iconHtml) ? '<div class="tname">' + (name || '&mdash;') + '</div>' : '') +
-      (sub ? '<div class="sub">' + sub + '</div>' : '') +
-      (canReroll ? '<button class="reroll" data-act="reroll" data-cat="' + cat + '" data-i="' + index +
-        '" data-tip="Reroll ' + label.toLowerCase() + ' (' + count + ' so far)">&#x21bb; ' + count + '</button>' : '') +
+      '<div class="tname">' + (name || '&mdash;') + '</div>' +
+      '<div class="sub">' + (sub || '&nbsp;') + '</div>' +
+      // The reroll button always sits at the bottom, so tiles line up
+      '<div class="tile-foot">' + (canReroll ? '<button class="reroll" data-act="reroll" data-cat="' + cat +
+        '" data-i="' + index + '" data-tip="Reroll ' + label.toLowerCase() + ' (' + count + ' so far)">&#x21bb; ' +
+        count + '</button>' : '') + '</div>' +
       '</div>';
   }
 
@@ -1264,7 +1446,10 @@
         ' so far)">&#x21bb; Faction</button>' : '') +
       '<button data-act="roll" data-i="' + index + '"' + (locked(p) ? ' disabled' : '') + '>' +
       (r ? 'Reroll all' : 'Roll') + '</button>' +
-      '<button class="quiet" data-act="prefs" data-i="' + index + '" data-tip="Preferences">&#x2699;</button>' +
+      '<button class="quiet" data-act="pick" data-i="' + index + '" data-tip="Pick this character yourself, step by ' +
+      'step">Pick</button>' +
+      '<button class="quiet" data-act="prefs" data-i="' + index + '" data-tip="Advanced preferences for random rolls ' +
+      '(chances, shuffle...)">&#x2699;</button>' +
       '<button class="quiet" data-act="copy" data-i="' + index + '" data-tip="Copy this player\'s code">Code</button>' +
       (r ? '<button class="quiet" data-act="clear" data-i="' + index + '" data-tip="Clear this roll and its reroll ' +
         'counts (keeps the player and their preferences)">&#x21ba;</button>' : '') +
@@ -1288,7 +1473,8 @@
         can) +
       tile(index, 'class', 'Class', icon('class', r.cls, '', cls.name), cls.name, '', can) +
       tile(index, 'spec', 'Spec', r.spec >= 0 ? icon('spec', specKey, '', itemName('spec', specKey)) : '',
-        r.spec >= 0 ? cls.specs[r.spec] : '', r.spec >= 0 ? '' : 'not rolled', can && p.settings.rollSpec) +
+        r.spec >= 0 ? cls.specs[r.spec] : '', r.spec >= 0 ? SPEC_ROLES[r.cls][r.spec] : 'not rolled',
+        can && p.settings.rollSpec) +
       [0, 1].map(function (slot) {
         var prof = r.profs[slot];
         return tile(index, 'prof' + (slot + 1), 'Profession ' + (slot + 1),
@@ -1401,22 +1587,38 @@
     return out;
   }
 
+  // Why an item can't be chosen at all here, '' if it can: banned, or its faction / class is off for this player
+  function blockedReason(p, cat, key) {
+    if (banned(cat, key)) return 'banned by the rules';
+    if (cat === 'race' && !isAllowed(p, 'faction', RACES[key].faction)) {
+      return 'the ' + itemName('faction', RACES[key].faction) + ' is off for ' + p.name;
+    }
+    if (cat === 'spec') {
+      var cls = key.split('-')[0];
+      if (!isAllowed(p, 'class', cls)) return CLASSES[cls].name + ' is off for ' + p.name;
+    }
+    return '';
+  }
+
   function prefItem(p, cat, key, pct) {
     var s = p.settings.cats[cat];
     var era = inEra(cat, key, state.era);
-    var off = s.mode === 'pick' ? s.pick !== key : !s.allow[key];
+    var blocked = blockedReason(p, cat, key);
+    var off = blocked || (s.mode === 'pick' ? s.pick !== key : !s.allow[key]);
+    var slashed = blocked || !s.allow[key];
     var name = itemName(cat, key);
-    var tip = name + (era ? '' : ' (' + ERA_NAME[since(cat, key)] + ')') +
+    var tip = name + (blocked ? ' (' + blocked + ')' : '') + (era ? '' : ' (' + ERA_NAME[since(cat, key)] + ')') +
       (s.mode === 'chances' && !off && era ? ': ' + (pct[key] || 0) + '%' : '') +
       (s.mode === 'shuffle' && !off && era ? (deckOf(p, cat).indexOf(key) >= 0 ? ': still in the deck' :
         ': already drawn') : '');
     var shortName = cat === 'spec' ? CLASSES[key.split('-')[0]].specs[key.split('-')[1]] : name;
     var gender = p.settings.gender === 'f' ? 'f' : 'm';
-    return '<div class="item' + (off ? ' off' : '') + (era ? '' : ' era') +
-      (s.mode === 'pick' && !off ? ' picked' : '') +
+    return '<div class="item' + (off ? ' off' : '') + (era ? '' : ' era') + (slashed ? ' slashed' : '') +
+      (blocked ? ' blocked' : '') + (s.mode === 'pick' && !off ? ' picked' : '') +
       (s.mode === 'shuffle' && !off && era && deckOf(p, cat).indexOf(key) < 0 ? ' drawn' : '') +
       '" data-act="item" data-cat="' + cat + '" data-key="' + key + '" data-tip="' + esc(tip) + '">' +
-      (showIcons() ? '<img src="' + itemIcon(cat, key, gender) + '" alt="' + esc(name) + '">' : '') +
+      (showIcons() ? '<span class="icw"><img src="' + itemIcon(cat, key, gender) + '" alt="' + esc(name) + '"></span>' :
+        '') +
       (showNames() ? '<span class="iname">' + esc(shortName) + '</span>' : '') +
       (s.mode === 'chances' ? '<input type="number" class="w" min="0" max="1000" data-cat="' + cat + '" data-key="' +
         key + '" value="' + (Number(s.weight[key]) || 0) + '" aria-label="' + esc(name) + ' chance">' +
@@ -1427,7 +1629,7 @@
   function renderPrefs() {
     var index = state.tab;
     var p = state.players[index];
-    $('prefs-title').textContent = 'Preferences: ' + p.name;
+    $('prefs-title').textContent = 'Advanced preferences: ' + p.name;
     $('prefs-tabs').innerHTML = state.players.length > 1 ? state.players.map(function (q, i) {
       return '<button class="' + (i === index ? '' : 'quiet') + '" data-act="tab" data-i="' + i + '">' + esc(q.name) +
         '</button>';
@@ -1493,21 +1695,65 @@
     $('prefs').innerHTML = html;
   }
 
+  function banItem(bcat, cat, key) {
+    var on = !!state.party.ban[bcat][key];
+    // Banned with its faction / class, or in the draft
+    var drafter = bcat === 'faction' ? null : draftedBy(bcat, key) ||
+      (cat === 'spec' ? draftedBy('cls', key.split('-')[0]) : null);
+    var implied = !on && ((cat === 'race' && state.party.ban.faction[RACES[key].faction]) ||
+      (cat === 'spec' && state.party.ban.cls[key.split('-')[0]]) || !!drafter);
+    var name = itemName(cat, key);
+    var shortName = cat === 'spec' ? CLASSES[key.split('-')[0]].specs[key.split('-')[1]] : name;
+    return '<div class="item' + (on || implied ? ' off slashed' : '') + (implied ? ' blocked' : '') +
+      (inEra(cat, key, state.era) ? '' : ' era') + '" data-act="' + (implied ? '' : 'ban') + '" data-bcat="' +
+      bcat +
+      '" data-key="' + key + '" data-tip="' + esc(name + (on ? ': banned' : drafter ? ': banned by ' + drafter.name +
+        ' in the draft' : implied ? ': banned with its ' + (cat === 'race' ? 'faction' : 'class') : '')) + '">' +
+      (showIcons() ? '<span class="icw"><img src="' + itemIcon(cat, key, 'm') + '" alt="' +
+        esc(name) + '"></span>' : '') + (showNames() ? '<span class="iname">' + esc(shortName) + '</span>' : '') +
+      '</div>';
+  }
+
+  function renderBans() {
+    var labels = { faction: 'Factions', race: 'Races', cls: 'Classes', spec: 'Specs', prof: 'Professions' };
+    $('bans').innerHTML = BAN_CATS.map(function (b) {
+      var items;
+      if (b[0] === 'spec') {
+        items = KEYS['class'].map(function (cls) {
+          return '<div class="specgroup">' + (showIcons() ? '<img class="classmark" src="' + itemIcon('class', cls) +
+            '" alt="" data-tip="' + esc(CLASSES[cls].name) + '">' : '<span class="classname">' +
+            esc(CLASSES[cls].name) + '</span>') + [0, 1, 2].map(function (i) {
+            return banItem('spec', 'spec', cls + '-' + i);
+          }).join('') + '</div>';
+        }).join('');
+      } else {
+        items = KEYS[b[1]].map(function (key) { return banItem(b[0], b[1], key); }).join('');
+      }
+      return '<div class="banrow"><span class="banlabel">' + labels[b[0]] + '</span><div class="items' +
+        (b[0] === 'spec' ? ' specs' : '') + '">' + items + '</div></div>';
+    }).join('');
+  }
+
   function renderSetup() {
     $('era').value = state.era;
     $('hardcore').value = state.hardcore ? '1' : '0';
     $('display').value = state.display;
     $('rule-faction').value = state.party.faction;
-    $('dup-race').checked = state.party.dupRace;
-    $('dup-class').checked = state.party.dupClass;
-    $('dup-spec').checked = state.party.dupSpec;
-    $('dup-prof').value = state.party.profDup;
+    $('limit-race').value = state.party.limit.race;
+    $('limit-class').value = state.party.limit.cls;
+    $('limit-spec').value = state.party.limit.spec;
+    $('limit-prof').value = state.party.limit.prof;
+    $('prof-slot').checked = state.party.profSlot;
+    $('rule-pick').value = state.party.pick;
+    DRAFT_CATS.forEach(function (k) { $('draft-' + k).value = state.party.draft[k]; });
+    $('draft-box').style.display = state.party.pick === 'draft' ? '' : 'none';
     $('compat').value = state.party.compat;
     $('roll-all').textContent = state.players.length > 1 ? 'Roll everyone' : 'Roll';
   }
 
   function render() {
     renderSetup();
+    renderBans();
     renderPlayers();
     renderWorld();
     renderTrade();
@@ -1518,6 +1764,378 @@
       ' <span class="bad">(too long for one chat line: share the players\' own codes instead)</span>' :
       ' (fits in one chat line)');
     save();
+  }
+
+  // ---- Character picker (a game-like character creation; the preferences panel stays for random rolls) ----
+
+  var STEP_LABEL = { player: 'Player', draft: 'Draft bans', faction: 'Faction', race: 'Race', 'class': 'Class & spec',
+    profs: 'Professions', confirm: 'Confirm' };
+
+  // The draft step only when the rules say so
+  function wizardSteps() {
+    return state.party.pick === 'draft' ? ['player', 'draft', 'faction', 'race', 'class', 'profs', 'confirm'] :
+      ['player', 'faction', 'race', 'class', 'profs', 'confirm'];
+  }
+  var wiz = null;
+
+  // What player i may pick: the rules (bans, limits, faction rule) and the era; their own preferences only steer
+  // random rolls
+  function pickContext(i) {
+    return partyContext(i);
+  }
+
+  function factionChoices(i) {
+    var ctx = pickContext(i);
+    return KEYS.faction.map(function (f) {
+      var why = banned('faction', f) ? 'banned by the rules' :
+        ctx.faction && ctx.faction !== f ? 'the party is ' + itemName('faction', ctx.faction) + ' (same faction rule)' :
+          ctx.notFaction[f] ? 'another player has it (all different rule)' :
+            !raceChoices(i, f).some(function (r) { return !r.why; }) ? 'no race of it is left' : '';
+      return { key: f, why: why };
+    });
+  }
+
+  function raceChoices(i, faction) {
+    var ctx = pickContext(i);
+    return KEYS.race.filter(function (r) { return RACES[r].faction === faction && inEra('race', r, state.era); })
+      .map(function (r) {
+        var why = banned('race', r) ? 'banned by the rules' : ctx.race[r] ? 'the party already has enough' :
+          !classChoices(i, r).some(function (c) { return !c.why; }) ? 'no class of it is left' : '';
+        return { key: r, why: why };
+      });
+  }
+
+  function classChoices(i, race) {
+    var ctx = pickContext(i);
+    return COMBOS[race].map(String).filter(function (c) { return inEra('class', c, state.era); }).map(function (c) {
+      var why = banned('class', c) ? 'banned by the rules' : ctx.cls[c] ? 'the party already has enough' :
+        !specChoices(i, c).some(function (sp) { return !sp.why; }) ? 'no spec of it is left' : '';
+      return { key: c, why: why };
+    });
+  }
+
+  function specChoices(i, cls) {
+    var ctx = pickContext(i);
+    return [0, 1, 2].map(function (n) {
+      var key = cls + '-' + n;
+      return { key: key, why: banned('spec', key) ? 'banned by the rules' : ctx.spec[key] ?
+        'the party already has enough' : '' };
+    });
+  }
+
+  function profChoices(i, slot, other) {
+    var ctx = pickContext(i);
+    return KEYS.prof1.filter(function (k) { return inEra('prof1', k, state.era) && !banned('prof1', k); })
+      .map(function (k) {
+        var prof = Number(k);
+        var why = prof === other ? 'already picked' : ctx.profAny[prof] ? 'the party already has enough' :
+          ctx['prof' + slot][prof] ? 'another player has it in this slot' :
+            other >= 0 && state.party.compat === 'player' && !professionsGoTogether(prof, other) ?
+              'doesn\'t go with ' + PROFESSIONS[other].name + ' (compatible professions rule)' : '';
+        return { key: k, why: why };
+      });
+  }
+
+  function professionNote(prof) {
+    var p = PROFESSIONS[prof];
+    if (p.gather) {
+      var feeds = PROFESSIONS.filter(function (x) { return x.needs === p.name; }).map(function (x) { return x.name; });
+      return 'Gathering. Supplies ' + feeds.join(', ') + '.';
+    }
+    if (p.needs) return 'Crafting. Goes well with ' + p.needs + ' (its materials).';
+    if (p.name === 'Tailoring') return 'Crafting. Cloth drops from humanoids; goes well with Enchanting.';
+    return 'Crafting. Disenchants items you don\'t need; goes well with Tailoring.';
+  }
+
+  function openWizard(index) {
+    var p = index >= 0 ? state.players[index] : null;
+    var r = p && p.roll;
+    wiz = {
+      step: p ? 'faction' : 'player', player: p ? index : -1, faction: r ? RACES[r.race].faction : '',
+      race: r ? String(r.race) : '', gender: r ? r.gender : (p && p.settings.gender === 'f' ? 'f' : 'm'),
+      cls: r ? String(r.cls) : '', spec: r && r.spec >= 0 ? r.cls + '-' + r.spec : '',
+      prof1: r ? r.profs[0] : -1, prof2: r ? r.profs[1] : -1, also: 'none', note: ''
+    };
+    if (p && locked(p)) {
+      wiz.step = 'player';
+      wiz.note = '<span class="bad">' + esc(p.name) + '\'s hardcore roll is locked.</span>';
+    }
+    enterStep(wiz.step, 1);
+  }
+
+  function closeWizard() {
+    wiz = null;
+    $('wizard').innerHTML = '';
+    $('wizard').style.display = 'none';
+  }
+
+  // Go to a step; a faction step with only one choice is taken for you (and skipped going back)
+  function enterStep(step, direction) {
+    wiz.step = step;
+    if (step === 'faction') {
+      var open = factionChoices(wiz.player).filter(function (f) { return !f.why; });
+      if (open.length === 1) {
+        var closed = factionChoices(wiz.player).filter(function (f) { return f.why; })[0];
+        if (wiz.faction !== open[0].key) { wiz.race = ''; wiz.cls = ''; wiz.spec = ''; }
+        wiz.faction = open[0].key;
+        wiz.note = 'Only the ' + itemName('faction', open[0].key) + ' is available' + (closed ? ': the ' +
+          itemName('faction', closed.key) + ' is not (' + closed.why + ').' : '.');
+        enterStep(direction > 0 ? 'race' : 'player', direction);
+        return;
+      }
+    }
+    renderWizard();
+  }
+
+  function stepReady(step) {
+    if (step === 'player') return wiz.player >= 0;
+    if (step === 'faction') return !!wiz.faction;
+    if (step === 'race') return !!wiz.race;
+    if (step === 'class') return !!wiz.cls && !!wiz.spec;
+    if (step === 'profs') return wiz.prof1 >= 0 && wiz.prof2 >= 0;
+    return true;
+  }
+
+  function wizCard(act, key, selected, why, inner, tip) {
+    return '<div class="wcard' + (selected ? ' sel' : '') + (why ? ' no' : '') + '" data-act="' + (why ? '' : act) +
+      '" data-key="' + key + '" data-tip="' + esc(tip + (why ? ' (' + why + ')' : '')) + '">' + inner + '</div>';
+  }
+
+  function specsTip(cls) {
+    return CLASSES[cls].name + ': ' + CLASSES[cls].specs.map(function (sp, n) {
+      return sp + ' (' + SPEC_ROLES[cls][n] + ')';
+    }).join(', ');
+  }
+
+  function renderWizard() {
+    var w = wiz;
+    var i = w.player;
+    var p = i >= 0 ? state.players[i] : null;
+    var body = '';
+
+    if (w.step === 'player') {
+      body = '<p class="muted">Who are you picking for? If your player isn\'t here, add them first.</p>' +
+        '<div class="wgrid">' + state.players.map(function (q, n) {
+          var r = q.roll;
+          var why = locked(q) ? 'hardcore roll locked' : '';
+          return wizCard('w-player', n, n === i, why, '<b>' + esc(q.name) + '</b><span class="muted small">' +
+            (r ? RACES[r.race].name + ' ' + CLASSES[r.cls].name : 'no character yet') + '</span>', q.name);
+        }).join('') + '</div><p><button class="quiet small-btn" data-act="w-add">Add a player</button></p>';
+    } else if (w.step === 'draft') {
+      var limits = state.party.draft;
+      var dlabels = { race: 'Races', cls: 'Classes', spec: 'Specs', prof: 'Professions' };
+      var dcats = { race: 'race', cls: 'class', spec: 'spec', prof: 'prof1' };
+      body = '<p class="muted">Draft: ban up to ' + DRAFT_CATS.map(function (k) {
+        return limits[k] + ' ' + dlabels[k].toLowerCase();
+      }).join(', ') + ' for everyone. Bans are optional; click a slashed one to take it back.</p>' +
+        DRAFT_CATS.filter(function (k) { return limits[k] > 0; }).map(function (k) {
+          var cat = dcats[k];
+          var used = p.draft[k].length;
+          var keys = KEYS[cat].filter(function (key) { return inEra(cat, key, state.era); });
+          return '<h3 class="wsub">' + dlabels[k] + ' <span class="muted small">(' + used + ' of ' + limits[k] +
+            ' banned)</span></h3><div class="items' + (k === 'spec' ? ' specs' : '') + '">' + keys.map(function (key) {
+            var mine = p.draft[k].indexOf(key) >= 0;
+            var by = mine ? null : draftedBy(k, key);
+            var rule = !mine && !by && banned(cat, key);
+            var full = !mine && used >= limits[k];
+            var why = by ? 'banned by ' + by.name : rule ? 'banned by the rules' : full ? 'no bans left' : '';
+            var name = itemName(cat, key);
+            return '<div class="item' + (mine || by || rule ? ' off slashed' : '') + (why ? ' blocked' : '') +
+              '" data-act="' + (why ? '' : 'w-draft') + '" data-key="' + k + ':' + key + '" data-tip="' +
+              esc(name + (mine ? ': banned by you' : why ? ': ' + why : '')) + '"><span class="icw"><img src="' +
+              itemIcon(cat, key, 'm') + '" alt=""></span>' + (showNames() ? '<span class="iname">' + esc(cat === 'spec' ?
+                CLASSES[key.split('-')[0]].specs[key.split('-')[1]] : name) + '</span>' : '') + '</div>';
+          }).join('') + '</div>';
+        }).join('');
+    } else if (w.step === 'faction') {
+      body = '<div class="wgrid big">' + factionChoices(i).map(function (f) {
+        return wizCard('w-faction', f.key, w.faction === f.key, f.why, '<img src="' + itemIcon('faction', f.key) +
+          '" alt=""><b>' + itemName('faction', f.key) + '</b>', itemName('faction', f.key));
+      }).join('') + '</div>';
+    } else if (w.step === 'race') {
+      body = '<div class="wtoolbar">Gender: ' + ['m', 'f'].map(function (g) {
+        return '<button class="' + (w.gender === g ? '' : 'quiet ') + 'small-btn" data-act="w-gender" data-key="' + g +
+          '">' + (g === 'm' ? 'Male' : 'Female') + '</button>';
+      }).join(' ') + '</div><div class="wraces">' + raceChoices(i, w.faction).map(function (r) {
+        var race = RACES[r.key];
+        var inner = '<img class="face" src="' + itemIcon('race', r.key, w.gender) + '" alt="">' +
+          '<div class="wrace-text">' +
+          '<b>' + race.name + '</b><div class="wrow">' + (RACIALS[r.key] || []).map(function (rac) {
+            return '<img src="img/racial/' + rac[1] + '.jpg" alt="" data-tip="' + esc(rac[0] + ': ' + rac[2]) + '">';
+          }).join('') + '</div><div class="wrow">' + COMBOS[r.key].map(String).filter(function (c) {
+            return inEra('class', c, state.era);
+          }).map(function (c) {
+            return '<img class="' + (banned('class', c) ? 'gone' : '') + '" src="' + itemIcon('class', c) +
+              '" alt="" data-tip="' + esc(specsTip(c)) + '">';
+          }).join('') + '</div></div>';
+        return wizCard('w-race', r.key, w.race === r.key, r.why, inner, race.name);
+      }).join('') + '</div>';
+    } else if (w.step === 'class') {
+      body = '<div class="wbanners">' + classChoices(i, w.race).map(function (c) {
+        return wizCard('w-class', c.key, w.cls === c.key, c.why, '<img src="' + itemIcon('class', c.key) + '" alt="">' +
+          '<b>' + CLASSES[c.key].name + '</b>', specsTip(c.key));
+      }).join('') + '</div>';
+      if (w.cls) {
+        body += '<h3 class="wsub">' + CLASSES[w.cls].name + ' specs</h3><div class="wgrid">' +
+          specChoices(i, w.cls).map(function (sp) {
+            var n = Number(sp.key.split('-')[1]);
+            return wizCard('w-spec', sp.key, w.spec === sp.key, sp.why, '<img src="' + itemIcon('spec', sp.key) +
+              '" alt=""><b>' + CLASSES[w.cls].specs[n] + '</b><span class="role">' + SPEC_ROLES[w.cls][n] + '</span>',
+              CLASSES[w.cls].specs[n]);
+          }).join('') + '</div>';
+      }
+    } else if (w.step === 'profs') {
+      body = '<p class="muted">Gathering professions collect materials; crafting ones turn them into items. A pair ' +
+        'that supplies itself (Mining + Blacksmithing) is easiest solo.</p><div class="wprofs">' +
+        [1, 2].map(function (slot) {
+        var mine = slot === 1 ? w.prof1 : w.prof2;
+        var other = slot === 1 ? w.prof2 : w.prof1;
+        return '<div><h3 class="wsub">Profession ' + slot + '</h3><div class="wlist">' +
+          profChoices(i, slot, other).map(function (c) {
+            var prof = Number(c.key);
+            return wizCard('w-prof' + slot, c.key, mine === prof, c.why, '<img src="' + itemIcon('prof1', c.key) +
+              '" alt=""><span><b>' + PROFESSIONS[prof].name + '</b><span class="muted small">' +
+              (c.why === 'already picked' ? 'Already picked' : professionNote(prof)) + '</span></span>',
+              PROFESSIONS[prof].name);
+          }).join('') + '</div></div>';
+      }).join('') + '</div>';
+    } else {
+      var specN = Number(w.spec.split('-')[1]);
+      body = '<div class="wsummary">' +
+        '<div><img src="' + itemIcon('race', w.race, w.gender) + '" alt=""><b>' + RACES[w.race].name + '</b><span>' +
+        (w.gender === 'f' ? 'Female' : 'Male') + '</span></div>' +
+        '<div><img src="' + itemIcon('class', w.cls) + '" alt=""><b>' + CLASSES[w.cls].name + '</b><span>' +
+        itemName('faction', w.faction) + '</span></div>' +
+        '<div><img src="' + itemIcon('spec', w.spec) + '" alt=""><b>' + CLASSES[w.cls].specs[specN] + '</b><span>' +
+        SPEC_ROLES[w.cls][specN] + '</span></div>' + [w.prof1, w.prof2].map(function (prof) {
+          return '<div><img src="' + itemIcon('prof1', String(prof)) + '" alt=""><b>' + PROFESSIONS[prof].name +
+            '</b><span>' + (PROFESSIONS[prof].gather ? 'Gathering' : 'Crafting') + '</span></div>';
+        }).join('') + '</div>' +
+        '<label class="field" style="margin-top:14px"><span>Also use this for</span><select id="w-also">' +
+        '<option value="none">Only ' + esc(p.name) + '</option>' +
+        (state.players.length > 1 ? '<option value="all"' + (w.also === 'all' ? ' selected' : '') +
+          '>Every player</option>' : '') +
+        state.players.map(function (q, n) {
+          return n === i ? '' : '<option value="' + n + '"' + (w.also === String(n) ? ' selected' : '') + '>' +
+            esc(q.name) + ' too</option>';
+        }).join('') + '</select></label>';
+    }
+
+    var at = wizardSteps().indexOf(w.step);
+    var nav = wizardSteps().map(function (step, n) {
+      var reachable = n <= at || wizardSteps().slice(0, n).every(stepReady);
+      return '<button class="wstep' + (n === at ? ' on' : '') + '"' + (reachable ? ' data-act="w-go" data-key="' +
+        step + '"' : ' disabled') + '>' + (n + 1) + '. ' + STEP_LABEL[step] + '</button>';
+    }).join('');
+
+    $('wizard').style.display = 'flex';
+    $('wizard').innerHTML = '<div class="wizard"><div class="whead"><b>Pick a character' + (p ? ': ' + esc(p.name) :
+      '') + '</b><button class="quiet small-btn" data-act="w-close" data-tip="Close without changing anything">' +
+      '&#x2715;</button></div><div class="wsteps">' + nav + '</div>' +
+      (w.note ? '<p class="wnote">' + w.note + '</p>' : '') + '<div class="wbody">' + body + '</div>' +
+      '<div class="wfoot"><button class="quiet" data-act="w-back"' + (at === 0 ? ' disabled' : '') + '>Back</button>' +
+      '<span class="spacer"></span><a href="#prefs-title" data-act="w-advanced">Advanced preferences (chances, ' +
+      'shuffle...)</a><span class="spacer"></span>' + (w.step === 'confirm' ?
+        '<button data-act="w-confirm">Confirm character</button>' :
+        '<button data-act="w-next"' + (stepReady(w.step) ? '' : ' disabled') + '>Next</button>') + '</div></div>';
+  }
+
+  function applyPick() {
+    var w = wiz;
+    var specN = Number(w.spec.split('-')[1]);
+    var targets = [w.player];
+    if (w.also === 'all') targets = state.players.map(function (q, n) { return n; });
+    else if (w.also !== 'none') targets.push(Number(w.also));
+    var skipped = [];
+    targets.forEach(function (n) {
+      var q = state.players[n];
+      if (locked(q)) { skipped.push(q.name); return; }
+      q.roll = { race: Number(w.race), cls: Number(w.cls), gender: w.gender, spec: specN, profs: [w.prof1, w.prof2],
+        zone: 0 };
+    });
+    message('Picked for ' + targets.filter(function (n) { return skipped.indexOf(state.players[n].name) < 0; })
+      .map(function (n) { return esc(state.players[n].name); }).join(', ') + '.' +
+      (skipped.length ? ' Locked hardcore rolls kept: ' + skipped.map(esc).join(', ') + '.' : ''), 'good');
+    closeWizard();
+  }
+
+  function wizardClick(el) {
+    var act = el.getAttribute('data-act');
+    var key = el.getAttribute('data-key');
+    var w = wiz;
+    w.note = act === 'w-go' || act === 'w-back' || act === 'w-next' ? '' : w.note;
+    if (act === 'w-close') { closeWizard(); return true; }
+    if (act === 'w-advanced') {
+      state.tab = Math.max(0, w.player);
+      closeWizard();
+      render();
+      setTimeout(function () { $('prefs-title').scrollIntoView({ behavior: 'smooth' }); }, 0);
+      return true;
+    }
+    if (act === 'w-add') {
+      if (state.players.length < 40) {
+        var added = newPlayer(state.players.length + 1);
+        added.settings = JSON.parse(JSON.stringify(state.players[0].settings));
+        state.players.push(added);
+        w.player = state.players.length - 1;
+        render();
+      }
+    } else if (act === 'w-player') {
+      w.player = Number(key);
+    } else if (act === 'w-draft') {
+      var parts = key.split(':');
+      var list = state.players[w.player].draft[parts[0]];
+      var at = list.indexOf(parts[1]);
+      if (at >= 0) list.splice(at, 1);
+      else if (list.length < state.party.draft[parts[0]]) list.push(parts[1]);
+      // Picks made before may no longer fit
+      if (w.race && !raceChoices(w.player, w.faction).some(function (r) { return r.key === w.race && !r.why; })) {
+        w.race = ''; w.cls = ''; w.spec = '';
+      }
+      if (w.cls && !classChoices(w.player, w.race || '1').some(function (c) { return c.key === w.cls && !c.why; })) {
+        w.cls = ''; w.spec = '';
+      }
+      render();
+    } else if (act === 'w-faction') {
+      if (w.faction !== key) { w.race = ''; w.cls = ''; w.spec = ''; }
+      w.faction = key;
+      enterStep('race', 1);
+      return true;
+    } else if (act === 'w-gender') {
+      w.gender = key;
+    } else if (act === 'w-race') {
+      if (w.race !== key) { w.cls = ''; w.spec = ''; }
+      w.race = key;
+      enterStep('class', 1);
+      return true;
+    } else if (act === 'w-class') {
+      if (w.cls !== key) w.spec = '';
+      w.cls = key;
+    } else if (act === 'w-spec') {
+      w.spec = key;
+    } else if (act === 'w-prof1' || act === 'w-prof2') {
+      var prof = Number(key);
+      if (act === 'w-prof1') w.prof1 = prof; else w.prof2 = prof;
+    } else if (act === 'w-go') {
+      enterStep(key, wizardSteps().indexOf(key) >= wizardSteps().indexOf(w.step) ? 1 : -1);
+      return true;
+    } else if (act === 'w-back') {
+      enterStep(wizardSteps()[Math.max(0, wizardSteps().indexOf(w.step) - 1)], -1);
+      return true;
+    } else if (act === 'w-next') {
+      if (stepReady(w.step)) enterStep(wizardSteps()[wizardSteps().indexOf(w.step) + 1], 1);
+      return true;
+    } else if (act === 'w-confirm') {
+      var also = document.getElementById('w-also');
+      w.also = also ? also.value : 'none';
+      applyPick();
+      render();
+      return true;
+    } else {
+      return false;
+    }
+    renderWizard();
+    return true;
   }
 
   // ---- Events ----
@@ -1540,6 +2158,13 @@
     var el = e.target.closest ? e.target.closest('[data-act]') : null;
     if (!el || (e.target.tagName === 'INPUT' && el.getAttribute('data-act') === 'item')) return;
     var act = el.getAttribute('data-act');
+    if (act === '') return;
+    if (act.indexOf('w-') === 0) {
+      e.preventDefault();
+      if (wiz && wizardClick(el)) return;
+      return;
+    }
+    if (act === 'pick') { openWizard(el.hasAttribute('data-i') ? Number(el.getAttribute('data-i')) : -1); return; }
     var index = Number(el.getAttribute('data-i'));
     var cat = el.getAttribute('data-cat');
     var p = state.players[state.tab];
@@ -1568,7 +2193,7 @@
       newWorldSeed();
     } else if (act === 'item') {
       var key = el.getAttribute('data-key');
-      if (!inEra(cat, key, state.era)) return;
+      if (!inEra(cat, key, state.era) || blockedReason(p, cat, key)) return;
       var c = p.settings.cats[cat];
       if (c.mode === 'pick') c.pick = key;
       else c.allow[key] = !c.allow[key];
@@ -1584,6 +2209,12 @@
       p.decks[cat] = [];
     } else if (act === 'all-on') {
       KEYS[cat].forEach(function (k) { p.settings.cats[cat].allow[k] = true; });
+    } else if (act === 'ban') {
+      var bans = state.party.ban[el.getAttribute('data-bcat')];
+      var bkey = el.getAttribute('data-key');
+      bans[bkey] = !bans[bkey];
+    } else if (act === 'unban') {
+      state.party.ban = defaultRules().ban;
     } else if (act === 'prefs-default') {
       p.settings = defaultSettings();
       p.decks = {};
@@ -1615,13 +2246,72 @@
   $('hardcore').addEventListener('change', function () { state.hardcore = this.value === '1'; render(); });
   $('display').addEventListener('change', function () { state.display = this.value; render(); });
   $('rule-faction').addEventListener('change', function () { state.party.faction = this.value; render(); });
-  ['race', 'class', 'spec'].forEach(function (what) {
-    $('dup-' + what).addEventListener('change', function () {
-      state.party['dup' + what.charAt(0).toUpperCase() + what.slice(1)] = this.checked;
+  [['race', 'race'], ['class', 'cls'], ['spec', 'spec'], ['prof', 'prof']].forEach(function (pair) {
+    $('limit-' + pair[0]).addEventListener('change', function () {
+      state.party.limit[pair[1]] = Math.max(0, Math.min(40, Math.floor(Number(this.value) || 0)));
       render();
     });
   });
-  $('dup-prof').addEventListener('change', function () { state.party.profDup = this.value; render(); });
+  $('prof-slot').addEventListener('change', function () { state.party.profSlot = this.checked; render(); });
+  $('rule-pick').addEventListener('change', function () { state.party.pick = this.value; render(); });
+  DRAFT_CATS.forEach(function (k) {
+    $('draft-' + k).addEventListener('change', function () {
+      state.party.draft[k] = Math.max(0, Math.min(15, Math.floor(Number(this.value) || 0)));
+      // Bans over the new limit go back
+      state.players.forEach(function (q) { q.draft[k] = q.draft[k].slice(0, state.party.draft[k]); });
+      render();
+    });
+  });
+
+  // Rules as a file: the same shape as roller-config.js's rules
+  function rulesForFile() {
+    var r = state.party;
+    var out = { faction: r.faction, limit: r.limit, profSlot: r.profSlot, compat: r.compat, pick: r.pick,
+      draft: r.draft, ban: {} };
+    Object.keys(r.ban).forEach(function (k) {
+      out.ban[k] = Object.keys(r.ban[k]).filter(function (key) { return r.ban[k][key]; });
+    });
+    return out;
+  }
+
+  $('rules-save').addEventListener('click', function () {
+    var blob = new Blob([JSON.stringify({ rules: rulesForFile(), era: state.era, hardcore: state.hardcore }, null, 2)],
+      { type: 'application/json' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'roller-rules.json';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(function () { URL.revokeObjectURL(link.href); document.body.removeChild(link); }, 0);
+  });
+  $('rules-load').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        var saved = CONFIG.rules;
+        CONFIG.rules = data.rules || data; // read through the same path as roller-config.js
+        state.party = defaultRules();
+        CONFIG.rules = saved;
+        if (ERAS.indexOf(data.era) >= 0) state.era = data.era;
+        if (data.hardcore !== undefined) state.hardcore = !!data.hardcore;
+        message('Rules loaded from ' + esc(file.name) + '.', 'good');
+      } catch (e) {
+        message('That file is not a rules file.');
+      }
+      $('rules-load').value = '';
+      render();
+    };
+    reader.readAsText(file);
+  });
+  $('rules-default').addEventListener('click', function () {
+    state.party = defaultRules();
+    state.players.forEach(function (q) { q.draft = emptyDraft(); });
+    message('Rules back to roller-config.js.', 'good');
+    render();
+  });
   $('compat').addEventListener('change', function () { state.party.compat = this.value; render(); });
 
   $('roll-all').addEventListener('click', function () { rollEveryone(); render(); });
@@ -1677,6 +2367,10 @@
     render();
     if (result.ok) updateTradePreview(result);
   });
+
+  // The picker closes with Escape or a click outside it
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && wiz) closeWizard(); });
+  $('wizard').addEventListener('click', function (e) { if (e.target === this) closeWizard(); });
 
   // Hover names
   var tip = $('tip');

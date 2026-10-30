@@ -858,9 +858,20 @@ public:
         if (HandleRollAddonMessage(player, msg.substr(prefix.size())))
             return true;
 
-        // The level of the first talent point, so the addon can open the talent frame before level 10
+        // The level of the first talent point, so the addon can open the talent frame before level 10, and the
+        // addon version this module expects (older addons send "DEF" with no version)
         if (msg.compare(prefix.size(), 3, "DEF") == 0)
+        {
             SendAddon(player, Acore::StringFormat("L\t{}", TalentFrameLevel(player)));
+            SendAddon(player, Acore::StringFormat("V\t{}", RANDOMIZER_ADDON_VERSION));
+            uint32 version = msg.size() > prefix.size() + 4 ?
+                uint32(std::max(0, std::atoi(msg.c_str() + prefix.size() + 4))) : 1;
+            if (version != RANDOMIZER_ADDON_VERSION)
+                ChatHandler(player->GetSession()).PSendSysMessage("|cffFF8000[World Randomizer]|r Your "
+                    "RandomizerAchievements addon is version {}, this server expects version {}: {} it from the "
+                    "module's addon folder.", version, RANDOMIZER_ADDON_VERSION,
+                    version < RANDOMIZER_ADDON_VERSION ? "update" : "use the matching version of");
+        }
 
         if (!enable)
         {
@@ -869,7 +880,7 @@ public:
         }
 
         std::string body = msg.substr(prefix.size());
-        if (body == "DEF")
+        if (body == "DEF" || body.compare(0, 4, "DEF\t") == 0)
         {
             SendDefinitions(player);
             return true;
