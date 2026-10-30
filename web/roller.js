@@ -1724,7 +1724,7 @@
       items + '</div></div>';
   }
 
-  // Factions side by side with their races below them; specs 5 classes a row; professions gathering / crafting
+  // Factions side by side with their races below them; classes with their specs, 5 a row; professions gathering / crafting
   function renderBans() {
     var sides = ['alliance', 'horde'].map(function (f) {
       return '<div class="banside ' + f + '"><div class="banhead">' + banItem('faction', 'faction', f) +
@@ -1732,13 +1732,12 @@
         return banItem('race', 'race', key);
       }).join('') + '</div></div>';
     }).join('');
-    var classes = KEYS['class'].map(function (key) { return banItem('cls', 'class', key); }).join('');
-    var specs = KEYS['class'].map(function (cls) {
-      return '<div class="specgroup">' + (showIcons() ? '<img class="classmark" src="' + itemIcon('class', cls) +
-        '" alt="" data-tip="' + esc(CLASSES[cls].name) + '">' : '<span class="classname">' +
-        esc(CLASSES[cls].name) + '</span>') + [0, 1, 2].map(function (i) {
-        return banItem('spec', 'spec', cls + '-' + i);
-      }).join('') + '</div>';
+    // Each class with its three specs: banning the class slashes its specs too
+    var classes = KEYS['class'].map(function (cls) {
+      return '<div class="banclass"><div class="banclass-cls">' + banItem('cls', 'class', cls) + '</div>' +
+        '<div class="banclass-specs">' + [0, 1, 2].map(function (i) {
+          return banItem('spec', 'spec', cls + '-' + i);
+        }).join('') + '</div></div>';
     }).join('');
     var profs = [['Gathering', true], ['Crafting', false]].map(function (g) {
       return '<div class="bangroup"><span class="bansub">' + g[0] + '</span><div class="items">' +
@@ -1746,8 +1745,7 @@
           return banItem('prof', 'prof1', key);
         }).join('') + '</div></div>';
     }).join('');
-    $('bans').innerHTML = banRow('Factions &amp; races', sides, ' bansides') + banRow('Classes', classes) +
-      banRow('Specs', specs, ' specs bangrid') + banRow('Professions', profs, ' bangroups');
+    $('bans').innerHTML = banRow('Factions &amp; races', sides, ' bansides') + banRow('Classes &amp; specs', classes, ' bangrid') + banRow('Professions', profs, ' bangroups');
   }
 
   function renderSetup() {

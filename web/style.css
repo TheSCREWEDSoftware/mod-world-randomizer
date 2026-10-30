@@ -347,7 +347,7 @@ code { background: #0b0a08; padding: 0 4px; border-radius: 3px; }
 .limits input { width: 54px; padding: 4px 6px; }
 .banrow { display: flex; gap: 12px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--line); }
 .banlabel { min-width: 90px; color: var(--muted); font-size: 12px; padding-top: 14px; }
-/* Bans: factions side by side with their races, specs 5 classes a row, professions gathering / crafting */
+/* Bans: factions side by side with their races, classes with their specs 5 a row, professions gathering / crafting */
 .items.bansides, .items.bangroups { gap: 12px; flex-wrap: nowrap; }
 .banside { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; }
 .banside.alliance { background: linear-gradient(180deg, rgba(40, 70, 160, 0.28), transparent); }
@@ -355,10 +355,20 @@ code { background: #0b0a08; padding: 0 4px; border-radius: 3px; }
 .banhead { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
 .banhead b { font-family: Georgia, serif; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
 .banraces { display: flex; gap: 6px; flex-wrap: wrap; }
-.items.bangrid { display: grid; grid-template-columns: repeat(5, max-content); column-gap: 8px; }
+.items.bangrid { display: grid; grid-template-columns: repeat(5, max-content); gap: 8px; }
+.banclass { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px;
+  padding: 3px 6px 3px 3px; background: rgba(255, 255, 255, 0.02); }
+.banclass-cls { padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--line); }
+.banclass-specs { display: flex; gap: 2px; }
+.banclass .item { min-width: 0; padding: 2px; }
+.banclass-cls .item img { width: 40px; height: 40px; }
+.banclass-specs .item img { width: 32px; height: 32px; }
 .bangroup { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; }
 .bansub { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
   margin-bottom: 4px; }
+@media (max-width: 1150px) {
+  .items.bangrid { grid-template-columns: repeat(3, max-content); }
+}
 @media (max-width: 900px) {
   .items.bangrid { grid-template-columns: repeat(2, max-content); }
   .items.bansides, .items.bangroups { flex-wrap: wrap; }
