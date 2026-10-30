@@ -503,6 +503,13 @@ public:
 
         RecomputePerks(state);
 
+        // The addon shows its achievement popup (it ignores this when the player turned popups off)
+        std::string rewards;
+        for (RandomizerRewardDef const& reward : def.rewards)
+            rewards += (rewards.empty() ? "" : ", ") + reward.text;
+        SendAddon(player, Acore::StringFormat("A\t{}\t{}\t{}\t{}", def.id, Clean(def.icon), Clean(def.name),
+            Clean(rewards)));
+
         if (announce)
         {
             ChatHandler handler(player->GetSession());

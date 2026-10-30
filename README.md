@@ -39,8 +39,8 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
   (1 to 10). By default the usual total at max level is spread from there (71 at 80); the addon opens the talent
   frame from that level (from level 1 when achievements gave bonus talent points).
 - **Where you start**: `Randomizer.PlayerStart.PreferLowZones` picks a bracket 1 zone that was already low
-  level before the shuffle when there is one; `.coop create <zone id>` starts the party (or just you) in the zone
-  you choose, such as the one the roller page shows.
+  level before the shuffle when there is one; `.coop create <zone id>` starts a party, and `.coop alone <zone id>`
+  just you, in the bracket 1 zone you choose (the roller page lets you pick it; the addon's Group tab has a menu).
 
 - **Rolls from the roller page** (`Randomizer.Roll.*`): `.randomizer roll <code> <player number>`, or the addon's
   "My roll" (`/randach roll`), ties a character to its roll for good. The race and class must match; talents then
@@ -93,13 +93,18 @@ Plain HTML + JavaScript, no build step.
   Rules (top of the page) apply to everyone: faction rule, how many players may share a race / class / spec /
   profession, bans (red slash), and Free pick or Draft (each player bans some races, classes, specs and
   professions first, 1 of each by default). "Pick" opens a step by step character picker (faction, race with its
-  racials, class and spec with its role, professions with what they go with, confirm). Defaults live in
+  racials, class and spec with its role, professions with what they go with, the start zone, confirm). Each
+  player's start zone can also be picked from the list under their roll. Defaults live in
   `web/roller-config.js`; "Save rules file" / "Load rules file" keep and share a rule set.
   "Save page to file" / "Load page from file" keep the whole page; "Copy link" gives a link that opens with the same
   party, rules and seed. "Reset everything" starts over; every reset or delete asks first ("Do not ask again" per
   question, "Ask again" brings them back).
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
+- `config.html`: drop the `.conf` your server uses for this module or mod-dynamic-scaling and get it back in the
+  newest layout: your values kept, new settings added with their default, removed ones kept at the end under a
+  note. It lists what changed, and downloads the old file (backup) and the new one. The templates are in
+  `web/conf-templates.js`; `python3 tools/make_conf_templates.py` rebuilds it after a `.conf.dist` changes.
 
 `web/randomizer.js` is the same shuffle as `WorldRandomizer.cpp` (same generator, same order), so a seed shows
 exactly the world the server will build. Tested for 72 seed / scope / balance / adjacency combinations against the
@@ -156,8 +161,9 @@ aowow setup.
 | `.rach list [category]` | players | Achievements, done or not |
 | `.rach profession [name]` | players | Choose the starting profession (once unlocked) |
 | `.coop` | players | Your co-op party and its code |
-| `.coop create` | players | Make a party and get its code (up to `Randomizer.Coop.MaxLevel`) |
+| `.coop create [zone id]` | players | Make a party and get its code (up to `Randomizer.Coop.MaxLevel`), in one of your start zones if given |
 | `.coop join <code>` | players | Join a friend's party and start where they start |
+| `.coop alone [zone id]` | players | Start alone for good (no party later), in one of your start zones if given |
 | `.hardcore` | players | Your hardcore status |
 | `.hardcore on confirm` | players | Go hardcore (Mode 1): level 1, starting gear and money only, never mailed or traded |
 | `.hardcore fallen` | players | The last 10 hardcore deaths |
@@ -240,10 +246,17 @@ nothing is shown in chat. `/randach <name>` opens a group member directly. If th
 the next login. The addon and the module share a version number (`ADDON_VERSION` in the addon,
 `RANDOMIZER_ADDON_VERSION` in `src/WorldRandomizerAchievements.h`); a player with another version is told in chat to
 update. A minimap button (drag it around; right-click for options) opens it, and the addon has a page in
-Interface > AddOns (minimap button on / off). The open window updates by itself every few seconds.
+Interface > AddOns (minimap button, achievement popup and its sound on / off, a popup preview). The open window
+updates by itself every few seconds.
+
+Earning an achievement shows a popup like the game's own achievement alert, above the action bars (up to two at a
+time, the rest wait their turn), with the icon, name and reward; hover keeps it, click opens the window. The chat
+line (`Randomizer.Achievements.Announce`) stays.
 
 The window's **Group** tab (`/randach group`) is the co-op start in buttons: **Start alone** or **Start with a party**
-(make one, with a random start zone or one you pick, or join one with its 6 letter code). Each choice asks first and
+(make one, or join one with its 6 letter code). A start zone menu (your bracket 1 zones) applies to starting alone
+and to a new party; leave it on "Don't pick one" to stay where you are alone, or get a random zone for a party.
+Each choice asks first and
 can't be redone. A character that hasn't chosen yet (and may still join a party) gets the tab opened at login. Below,
 your party: everyone in your co-op party and your group, online or not, with level, race and class, zone and roll.
 

@@ -6,6 +6,20 @@
 #
 # Everything is set up once at startup. Changes here need a worldserver restart.
 # Nothing is written to the creature tables, so Randomizer.World.Enable = 0 brings the normal world back.
+#
+# Settings in worldserver.conf (not here) that the module relies on:
+#   AddonChannel = 1               The RandomizerAchievements addon (achievements, popups, rolls, Group tab)
+#                                  talks to the server through addon messages.
+#   StartPlayerLevel = 1           New characters start at level 1, so they can still make or join a co-op party
+#                                  (Randomizer.Coop.MaxLevel) and pick their start zone.
+#   SkipCinematics = 1             Optional: skips the race intro, which would otherwise play before the
+#                                  character is moved to its shuffled start zone.
+#   MaxPrimaryTradeSkill = 2       The roller gives every character two primary professions.
+#   Quests.HighLevelHideDiff = 7   Quests more than this many levels above you are hidden. Shifted quests
+#                                  (Randomizer.Quests.MinLevelFromBracket) can be higher than before; -1 shows all.
+#   PlayerLimit                    Players allowed in at once; 1 queues everyone after the first player.
+#   AllowTwoSide.Interaction.Group A co-op party is one faction (Randomizer.Coop.SameFaction); set this to 1 only
+#                                  if you turn that off and want both factions in one group.
 
 #
 #    Randomizer.Enable
@@ -273,9 +287,12 @@ Randomizer.PlayerStart.SkipDeathKnights = 1
 
 #
 #    Randomizer.Coop.Enable
-#        Description: Co-op starts. One player types .coop create and gets a 6 letter code; friends type
-#                     .coop join <code> and start in the same place (a random bracket 1 zone when the world
-#                     shuffle is on), with their hearthstone there and in the leader's group.
+#        Description: Co-op starts. One player types .coop create [zone id] and gets a 6 letter code; friends
+#                     type .coop join <code> and start in the same place (a bracket 1 zone when the world
+#                     shuffle is on: the one given, or a random one), with their hearthstone there and in the
+#                     leader's group. .coop alone [zone id] starts a character alone for good instead. The
+#                     RandomizerAchievements addon's Group tab offers the same choices with buttons, and opens by
+#                     itself for characters that haven't chosen yet.
 #        Default:     1
 
 Randomizer.Coop.Enable = 1
@@ -289,7 +306,7 @@ Randomizer.Coop.MaxSize = 5
 
 #
 #    Randomizer.Coop.MaxLevel
-#        Description: Highest level at which a player may create or join a co-op party.
+#        Description: Highest level at which a player may create or join a co-op party, or pick a start zone.
 #        Default:     1
 
 Randomizer.Coop.MaxLevel = 1

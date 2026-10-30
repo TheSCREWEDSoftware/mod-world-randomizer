@@ -9,7 +9,7 @@
 -- /randach roll       tie this character to its roll from the roller page
 
 local PREFIX = "RANDACH"
-local ADDON_VERSION = 3   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
+local ADDON_VERSION = 4   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
 local serverVersion      -- what the module expects, from its "V" reply
 local ROW_HEIGHT = 50
 local ROWS = 8
@@ -32,6 +32,11 @@ local autoRefresh = 0    -- seconds until the open window asks the server again
 local achievementsOff = false -- the server said achievements are off ("My roll" still works)
 local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
 local currentTab = 1     -- 1 achievements, 2 group
+local SelectTab, ShowPopupNow
+local function UI_DB_POPUP()
+    RandomizerAchievementsDB = RandomizerAchievementsDB or {}
+    return RandomizerAchievementsDB
+end
 local achWidgets = {}    -- what the achievements tab shows (hidden on the group tab)
 
 -- Made for the server's current content?
@@ -646,7 +651,7 @@ groupErrorText:SetJustifyH("LEFT")
 -- The chooser: alone, or a party (make one, or join one with a code)
 local chooser = CreateFrame("Frame", nil, groupPanel)
 chooser:SetPoint("TOPLEFT", 0, -46)
-chooser:SetWidth(670); chooser:SetHeight(150)
+chooser:SetWidth(670); chooser:SetHeight(184)
 
 local function BigButton(parent, text, width)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
@@ -655,8 +660,20 @@ local function BigButton(parent, text, width)
     return button
 end
 
+local zoneLabel = chooser:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+zoneLabel:SetPoint("TOPLEFT", 0, -8)
+zoneLabel:SetText("Start zone:")
+
+local zoneMenu = CreateFrame("Frame", "RandomizerStartZoneMenu", chooser, "UIDropDownMenuTemplate")
+zoneMenu:SetPoint("LEFT", zoneLabel, "RIGHT", -8, -2)
+UIDropDownMenu_SetWidth(zoneMenu, 200)
+
+local zoneHint = chooser:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+zoneHint:SetPoint("LEFT", zoneMenu, "RIGHT", -6, 2)
+zoneHint:SetText("for starting alone or making a party (joining goes where the party starts)")
+
 local aloneButton = BigButton(chooser, "Start alone")
-aloneButton:SetPoint("TOPLEFT", 0, 0)
+aloneButton:SetPoint("TOPLEFT", 0, -34)
 local partyButton = BigButton(chooser, "Start with a party")
 partyButton:SetPoint("LEFT", aloneButton, "RIGHT", 12, 0)
 
@@ -675,14 +692,10 @@ partyBox:Hide()
 
 local makeLabel = partyBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 makeLabel:SetPoint("TOPLEFT", 0, 0)
-makeLabel:SetText("Make a party")
-
-local zoneMenu = CreateFrame("Frame", "RandomizerStartZoneMenu", partyBox, "UIDropDownMenuTemplate")
-zoneMenu:SetPoint("TOPLEFT", makeLabel, "BOTTOMLEFT", -16, -2)
-UIDropDownMenu_SetWidth(zoneMenu, 200)
+makeLabel:SetText("Make a party (in the start zone above)")
 
 local function ZoneName(id)
-    if id == 0 then return "A random start zone" end
+    if id == 0 then return "Don't pick one" end
     for _, zone in ipairs(startZones) do
         if zone.id == id then return zone.name end
     end
@@ -705,7 +718,7 @@ UIDropDownMenu_Initialize(zoneMenu, function()
 end)
 
 local createButton = BigButton(partyBox, "Create", 100)
-createButton:SetPoint("LEFT", zoneMenu, "RIGHT", -6, 2)
+createButton:SetPoint("TOPLEFT", makeLabel, "BOTTOMLEFT", 0, -6)
 
 local joinLabel = partyBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 joinLabel:SetPoint("TOPLEFT", 380, 0)
@@ -735,7 +748,9 @@ local function Confirm(what, request)
 end
 
 aloneButton:SetScript("OnClick", function()
-    Confirm("Start alone: this character will never make or join a co-op party.", "STARTSOLO")
+    local where = chosenZone == 0 and "where you are now" or ("in " .. ZoneName(chosenZone))
+    Confirm("Start alone " .. where .. ": this character will never make or join a co-op party.",
+        "STARTSOLO\t" .. chosenZone)
 end)
 local UpdateGroup
 partyButton:SetScript("OnClick", function()
@@ -743,7 +758,8 @@ partyButton:SetScript("OnClick", function()
     UpdateGroup()
 end)
 createButton:SetScript("OnClick", function()
-    Confirm("Make a co-op party starting in " .. ZoneName(chosenZone) .. ". You get a code to give your friends.",
+    local where = chosenZone == 0 and "a random start zone" or ZoneName(chosenZone)
+    Confirm("Make a co-op party starting in " .. where .. ". You get a code to give your friends.",
         "STARTCREATE\t" .. chosenZone)
 end)
 joinButton:SetScript("OnClick", function()
@@ -815,6 +831,8 @@ UpdateGroup = function()
     Shown(chooser, choosing)
     if choosing then UIDropDownMenu_SetText(zoneMenu, ZoneName(chosenZone)) end
     Shown(zoneMenu, #startZones > 0)
+    Shown(zoneLabel, #startZones > 0)
+    Shown(zoneHint, #startZones > 0)
     if waitingChoice then
         aloneButton:Disable(); partyButton:Disable(); createButton:Disable(); joinButton:Disable()
     else
@@ -822,7 +840,7 @@ UpdateGroup = function()
     end
 
     partyTitle:ClearAllPoints()
-    local top = choosing and (partyBox:IsShown() and -46 - 150 or -46 - 70) or -50
+    local top = choosing and (partyBox:IsShown() and -46 - 184 or -46 - 104) or -50
     partyTitle:SetPoint("TOPLEFT", 0, top)
     local others = 0
     for _, m in ipairs(party) do
@@ -881,7 +899,7 @@ end
 
 -- Tabs under the window
 local tabs = {}
-local function SelectTab(index)
+SelectTab = function(index)
     currentTab = index
     PanelTemplates_SetTab(frame, index)
     for _, widget in ipairs(achWidgets) do widget:Hide() end
@@ -963,13 +981,145 @@ local function OnGroupMessage(parts)
     return false
 end
 
+-- ---------------------------------------------------------------- achievement popup (like the game's own alert)
+
+local POPUP_TIME = 4.5   -- seconds fully shown, then it fades out
+local POPUP_FADE = 1.5
+local popups, popupQueue = {}, {}
+
+local function CreatePopup(index)
+    local p = CreateFrame("Button", "RandomizerAchievementAlert" .. index, UIParent)
+    p:SetWidth(300); p:SetHeight(88)
+    p:SetFrameStrata("DIALOG")
+    p:Hide()
+    p.busy, p.age = false, 0
+
+    p.bg = p:CreateTexture(nil, "BACKGROUND")
+    p.bg:SetTexture("Interface\\AchievementFrame\\UI-Achievement-Alert")
+    p.bg:SetTexCoord(0, 0.605, 0, 0.703)
+    p.bg:SetAllPoints()
+
+    p.icon = p:CreateTexture(nil, "BORDER")
+    p.icon:SetWidth(50); p.icon:SetHeight(50)
+    p.icon:SetPoint("LEFT", 26, 2)
+    p.iconFrame = p:CreateTexture(nil, "ARTWORK")
+    p.iconFrame:SetTexture("Interface\\AchievementFrame\\UI-Achievement-IconFrame")
+    p.iconFrame:SetTexCoord(0, 0.5625, 0, 0.5625)
+    p.iconFrame:SetWidth(72); p.iconFrame:SetHeight(72)
+    p.iconFrame:SetPoint("CENTER", p.icon, "CENTER", -1, 2)
+
+    p.unlocked = p:CreateFontString(nil, "OVERLAY", "GameFontBlackTiny")
+    p.unlocked:SetPoint("TOP", 7, -23)
+    p.unlocked:SetText("Randomizer Achievement")
+
+    p.name = p:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    p.name:SetPoint("TOP", p.unlocked, "BOTTOM", 0, -4)
+    p.name:SetWidth(190); p.name:SetHeight(16)
+
+    p.reward = p:CreateFontString(nil, "OVERLAY", "GameFontGreenSmall")
+    p.reward:SetPoint("TOP", p.name, "BOTTOM", 0, -1)
+    p.reward:SetWidth(200); p.reward:SetHeight(24)
+    p.reward:SetJustifyV("TOP")
+
+    p.glow = p:CreateTexture(nil, "OVERLAY")
+    p.glow:SetTexture("Interface\\AchievementFrame\\UI-Achievement-Alert-Glow")
+    p.glow:SetBlendMode("ADD")
+    p.glow:SetTexCoord(0, 0.78125, 0, 0.66796875)
+    p.glow:SetWidth(400); p.glow:SetHeight(171)
+    p.glow:SetPoint("CENTER")
+
+    p.shine = p:CreateTexture(nil, "OVERLAY")
+    p.shine:SetTexture("Interface\\AchievementFrame\\UI-Achievement-Alert-Glow")
+    p.shine:SetBlendMode("ADD")
+    p.shine:SetTexCoord(0.78125, 0.912109375, 0, 0.28125)
+    p.shine:SetWidth(67); p.shine:SetHeight(72)
+
+    -- Glow flash, a shine sweeping across, a few seconds shown, then a fade; hovering keeps it
+    p:SetScript("OnUpdate", function(self, elapsed)
+        self.age = self.age + elapsed
+        local t = self.age
+        self.glow:SetAlpha(t < 0.2 and t / 0.2 or math.max(0, 1 - (t - 0.2) / 0.5))
+        if t < 0.85 then
+            self.shine:Show()
+            self.shine:SetPoint("TOPLEFT", self, "TOPLEFT", -10 + 270 * (t / 0.85), -8)
+            self.shine:SetAlpha(t < 0.15 and t / 0.15 or 1 - t / 0.85)
+        else
+            self.shine:Hide()
+        end
+        if MouseIsOver(self) and t > 0.85 then self.age = math.min(self.age, POPUP_TIME) end
+        if t > POPUP_TIME then
+            local alpha = 1 - (t - POPUP_TIME) / POPUP_FADE
+            if alpha <= 0 then
+                self:Hide()
+                return
+            end
+            self:SetAlpha(alpha)
+        end
+    end)
+    p:SetScript("OnHide", function(self)
+        self.busy = false
+        local nextOne = table.remove(popupQueue, 1)
+        if nextOne then ShowPopupNow(nextOne) end
+    end)
+    p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    p:SetScript("OnClick", function(self, button)
+        self:Hide()
+        if button == "LeftButton" and available then
+            viewing = UnitName("player")
+            frame:Show()
+            SelectTab(1)
+        end
+    end)
+    p:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(self.achName or "", 1, 0.82, 0)
+        if self.achReward and self.achReward ~= "" then GameTooltip:AddLine(self.achReward, 0.1, 1, 0.1, true) end
+        GameTooltip:AddLine("Click: open the achievements. Right-click: close.", 0.6, 0.8, 1)
+        GameTooltip:Show()
+    end)
+    p:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Where the game puts its own alerts: above the action bars, the second one above the first
+    p:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 128 + (index - 1) * 92)
+    popups[index] = p
+    return p
+end
+
+ShowPopupNow = function(ach)
+    for index = 1, 2 do
+        local p = popups[index] or CreatePopup(index)
+        if not p.busy then
+            p.busy = true
+            p.age = 0
+            p.achName, p.achReward = ach.name, ach.reward
+            p:SetAlpha(1)
+            p.icon:SetTexture("Interface\\Icons\\" .. (ach.icon ~= "" and ach.icon or "INV_Misc_QuestionMark"))
+            p.name:SetText(ach.name)
+            p.reward:SetText(ach.reward or "")
+            p:Show()
+            if not UI_DB_POPUP().popupMute then PlaySoundFile("Sound\\Spells\\AchievmentSound1.wav") end
+            return
+        end
+    end
+    table.insert(popupQueue, ach)
+end
+
+-- "A" from the server: an achievement was just earned
+local function OnEarned(parts)
+    local ach = { id = tonumber(parts[2]) or 0, icon = parts[3] or "", name = parts[4] or "", reward = parts[5] or "" }
+    if not UI_DB_POPUP().noPopup then ShowPopupNow(ach) end
+    if frame:IsShown() and currentTab == 1 then Request(viewing) end
+end
+
 local function OnMessage(message)
     local parts = Split(message, "\t")
     local kind = parts[1]
     available = true
     if OnRollMessage(parts) or OnGroupMessage(parts) then return end
 
-    if kind == "V" then
+    if kind == "A" then
+        OnEarned(parts)
+    elseif kind == "V" then
         serverVersion = tonumber(parts[2])
     elseif kind == "L" then
         -- The server gives talent points before level 10: open the talent frame from that level
@@ -1134,6 +1284,7 @@ local UI_ICON = "Interface\\Icons\\Achievement_General"
 local UI_DEFAULT_ANGLE = 200
 local UI_CLICK_TEXT = "open the achievements"
 local UI_HELP = "Account-wide achievements of mod-world-randomizer, with their rewards, for you and your group.\n\n" ..
+    "A popup shows each achievement you earn, like the game's own (Interface > AddOns turns it off).\n\n" ..
     "/randach - show or hide the window\n/randach <name> - a group member's achievements\n/randach group - " ..
     "start alone or with a co-op party, and your party's info\n/randach roll - tie this character to its roll " ..
     "from the roller page\n.rach - your rewards in chat\n\nThe window updates by " ..
@@ -1253,9 +1404,29 @@ minimapCheck:SetScript("OnClick", function(self)
     UpdateMinimapButton()
 end)
 
+local popupCheck = CreateFrame("CheckButton", UI_NAME .. "PopupCheck", optionsPanel,
+    "InterfaceOptionsCheckButtonTemplate")
+popupCheck:SetPoint("TOPLEFT", minimapCheck, "BOTTOMLEFT", 0, -4)
+_G[UI_NAME .. "PopupCheckText"]:SetText("Show a popup when you earn an achievement (the chat line stays)")
+popupCheck:SetScript("OnClick", function(self) UI_DB().noPopup = not self:GetChecked() end)
+
+local soundCheck = CreateFrame("CheckButton", UI_NAME .. "SoundCheck", optionsPanel,
+    "InterfaceOptionsCheckButtonTemplate")
+soundCheck:SetPoint("TOPLEFT", popupCheck, "BOTTOMLEFT", 0, -4)
+_G[UI_NAME .. "SoundCheckText"]:SetText("Play a sound with the popup")
+soundCheck:SetScript("OnClick", function(self) UI_DB().popupMute = not self:GetChecked() end)
+
+local previewButton = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
+previewButton:SetWidth(120); previewButton:SetHeight(22)
+previewButton:SetPoint("LEFT", _G[UI_NAME .. "PopupCheckText"], "RIGHT", 12, 0)
+previewButton:SetText("Preview")
+previewButton:SetScript("OnClick", function()
+    ShowPopupNow({ icon = "Achievement_General", name = "Into the Unknown", reward = "+5% experience" })
+end)
+
 local openButton = CreateFrame("Button", nil, optionsPanel, "UIPanelButtonTemplate")
 openButton:SetWidth(160); openButton:SetHeight(22)
-openButton:SetPoint("TOPLEFT", minimapCheck, "BOTTOMLEFT", 2, -12)
+openButton:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 2, -12)
 openButton:SetText(UI_CLICK_TEXT:sub(1, 1):upper() .. UI_CLICK_TEXT:sub(2))
 openButton:SetScript("OnClick", function()
     InterfaceOptionsFrame:Hide()
@@ -1266,6 +1437,8 @@ optionsPanel:SetScript("OnShow", function()
     optionsText:SetText(UI_HELP)
     optionsStatus:SetText(UI_STATUS())
     minimapCheck:SetChecked(not UI_DB().hideMinimap)
+    popupCheck:SetChecked(not UI_DB().noPopup)
+    soundCheck:SetChecked(not UI_DB().popupMute)
     if available then openButton:Enable() else openButton:Disable() end
 end)
 

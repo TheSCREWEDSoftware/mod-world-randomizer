@@ -859,9 +859,13 @@
   // The bracket 1 zones player index may start in: their faction's own, else contested
   function startFor(index) {
     var p = state.players[index];
+    return p.roll ? startForFaction(RACES[p.roll.race].faction) : null;
+  }
+
+  function startForFaction(faction) {
     var world = shuffledWorld();
-    if (!world || !p.roll) return null;
-    var team = RACES[p.roll.race].faction === 'alliance' ? 0 : 1;
+    if (!world || !faction) return null;
+    var team = faction === 'alliance' ? 0 : 1;
     var own = world.zones.filter(function (z) { return z.bracket === world.lowest && z.territory === team; });
     var contested = world.zones.filter(function (z) { return z.bracket === world.lowest && z.territory === 2; });
     var zones = own.length ? own : contested;
@@ -1519,8 +1523,13 @@
     }
     var all = start.zones.map(function (z) { return z.name + ' (' + z.id + ')'; }).join(', ');
     var auto = start.preferred.map(function (z) { return z.name; }).join(', ');
-    return '<div class="pstart">Starts in <b data-tip="' + esc('Bracket 1 zones: ' + all) + '">' +
-      esc(zoneName(r.zone)) + '</b>' + (start.own ? '' : ' <span class="muted">(contested)</span>') +
+    var choose = !locked(p) && start.zones.length > 1;
+    return '<div class="pstart">Starts in ' + (choose ? '<select class="zonepick" data-i="' + index +
+      '" data-tip="Pick the start zone (any bracket 1 zone of this faction)">' + start.zones.map(function (z) {
+        return '<option value="' + z.id + '"' + (z.id === r.zone ? ' selected' : '') + '>' + esc(z.name) +
+          '</option>';
+      }).join('') + '</select>' : '<b data-tip="' + esc('Bracket 1 zones: ' + all) + '">' + esc(zoneName(r.zone)) +
+      '</b>') + (start.own ? '' : ' <span class="muted">(contested)</span>') +
       (locked(p) || start.zones.length < 2 ? '' :
         ' <button class="reroll" data-act="reroll" data-cat="zone" data-i="' + index +
         '" data-tip="Reroll start zone (' + p.counts.zone + ' so far)">&#x21bb; ' + p.counts.zone + '</button>') +
@@ -1921,7 +1930,8 @@
       step: p ? wizardSteps()[1] : 'player', player: p ? index : -1, faction: r ? RACES[r.race].faction : '',
       race: r ? String(r.race) : '', gender: r ? r.gender : (p && p.settings.gender === 'f' ? 'f' : 'm'),
       cls: r ? String(r.cls) : '', spec: r && r.spec >= 0 ? r.cls + '-' + r.spec : '',
-      prof1: r ? r.profs[0] : -1, prof2: r ? r.profs[1] : -1, also: 'none', note: '', hover: null
+      prof1: r ? r.profs[0] : -1, prof2: r ? r.profs[1] : -1, also: 'none', note: '', hover: null,
+      zone: r ? r.zone : 0
     };
     if (p && locked(p)) {
       wiz.step = 'player';
@@ -1948,6 +1958,32 @@
     if (step === 'class') return !!wiz.cls && !!wiz.spec;
     if (step === 'profs') return wiz.prof1 >= 0 && wiz.prof2 >= 0;
     return true;
+  }
+
+  // Player 1 picks where the party starts (the others join with .coop join); Death Knights start in Acherus
+  function wizZones(i) {
+    var w = wiz;
+    if (i !== 0 || w.cls === '6') return '';
+    var start = startForFaction(w.faction);
+    if (!start) {
+      return '<p class="muted small" style="margin-top:14px">Start zone: set a world seed on the World map page to ' +
+        'pick one.</p>';
+    }
+    if (!start.zones.length) return '';
+    var ids = start.zones.map(function (z) { return z.id; });
+    if (ids.indexOf(w.zone) < 0) w.zone = 0;
+    return '<div class="cathead" style="margin-top:14px"><b>Start zone</b><span class="muted small">Any bracket ' +
+      start.world.bracket.min + '-' + start.world.bracket.max + ' zone of your faction' +
+      (start.own ? '' : ' (contested: no zone of your faction is in that bracket)') + '. In game: <code>.coop ' +
+      'create &lt;zone id&gt;</code>, or the addon\'s Group tab.</span></div><div class="wgrid wzones">' +
+      wizCard('w-zone', 0, w.zone === 0, '', '<b>&#x2684; Random</b><span class="muted small">The server picks ' +
+        'one</span>', 'Let the server pick') +
+      start.zones.map(function (z) {
+        var low = z.home === start.world.lowest;
+        return wizCard('w-zone', z.id, w.zone === z.id, '', '<b>' + esc(z.name) + '</b><span class="muted small">' +
+          (low ? 'A starting area before the shuffle' : 'Was level ' + z.min + '-' + z.max) + ' &middot; ' + z.id +
+          '</span>', z.name + ' (zone ' + z.id + ')');
+      }).join('') + '</div>';
   }
 
   function wizCard(act, key, selected, why, inner, tip) {
@@ -2155,7 +2191,7 @@
         SPEC_ROLES[w.cls][specN] + '</span></div>' + [w.prof1, w.prof2].map(function (prof) {
           return '<div><img src="' + itemIcon('prof1', String(prof)) + '" alt=""><b>' + PROFESSIONS[prof].name +
             '</b><span>' + (PROFESSIONS[prof].gather ? 'Gathering' : 'Crafting') + '</span></div>';
-        }).join('') + '</div>' +
+        }).join('') + '</div>' + wizZones(i) +
         '<label class="field" style="margin-top:14px"><span>Also use this for</span><select id="w-also">' +
         '<option value="none">Only ' + esc(p.name) + '</option>' +
         (state.players.length > 1 ? '<option value="all"' + (w.also === 'all' ? ' selected' : '') +
@@ -2223,7 +2259,7 @@
         if (why) { skipped.push(q.name + ' (' + why + ')'); return; }
       }
       q.roll = { race: Number(w.race), cls: Number(w.cls), gender: w.gender, spec: specN, profs: [w.prof1, w.prof2],
-        zone: 0 };
+        zone: n === 0 ? w.zone : 0 }; // 0: fixZones picks one
       picked.push(q.name);
     });
     message('Picked for ' + picked.map(esc).join(', ') + '.' +
@@ -2268,6 +2304,10 @@
         w.cls = ''; w.spec = '';
       }
       render();
+    } else if (act === 'w-zone') {
+      var keepAlso = document.getElementById('w-also');
+      if (keepAlso) w.also = keepAlso.value;
+      w.zone = Number(key);
     } else if (act === 'w-gender') {
       if (key === 'random') {
         var before = w.gender;
@@ -2465,7 +2505,10 @@
   document.addEventListener('change', function (e) {
     var t = e.target;
     var p = state.players[state.tab];
-    if (t.classList.contains('pname')) {
+    if (t.classList.contains('zonepick')) {
+      var zp = state.players[Number(t.getAttribute('data-i'))];
+      if (zp && zp.roll && !locked(zp)) zp.roll.zone = Number(t.value);
+    } else if (t.classList.contains('pname')) {
       state.players[Number(t.getAttribute('data-i'))].name = t.value.trim().slice(0, 24) || 'Player';
     } else if (t.classList.contains('w')) {
       p.settings.cats[t.getAttribute('data-cat')].weight[t.getAttribute('data-key')] =

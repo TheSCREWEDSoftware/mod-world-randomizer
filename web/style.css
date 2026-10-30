@@ -266,6 +266,7 @@ button.reroll {
 button.reroll:hover { color: var(--gold); border-color: var(--gold-dim); }
 
 .pstart { margin-top: 10px; font-size: 13px; }
+.pstart select.zonepick { width: auto; padding: 2px 6px; font-size: 13px; font-weight: 600; }
 .pnote { margin-top: 6px; font-size: 13px; }
 .small { font-size: 12px; }
 .small-btn { padding: 3px 9px; font-size: 12px; }
@@ -415,6 +416,7 @@ code { background: #0b0a08; padding: 0 4px; border-radius: 3px; }
 .wgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .wgrid.big { grid-template-columns: repeat(2, minmax(0, 220px)); justify-content: center; }
 .wgrid.big .wcard img { width: 96px; height: 96px; }
+.wgrid.wzones { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); margin-top: 8px; }
 
 .wraces { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .wraces .wcard { flex-direction: row; align-items: flex-start; text-align: left; }
@@ -516,3 +518,22 @@ button.danger { color: #ff8a7a; border-color: #6b2a24; }
 .wclass.no img { filter: grayscale(1); }
 .whead .spacer { flex: 1; }
 .whead { gap: 8px; }
+
+/* Config update page */
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 16px; text-align: center;
+  border: 2px dashed var(--gold-dim); border-radius: 10px; background: var(--panel-2); cursor: pointer;
+}
+.dropzone b { font-size: 16px; color: var(--gold); }
+.dropzone.over { border-color: var(--gold); background: rgba(255, 209, 0, 0.06); }
+.filebtn.linkish { background: none; border: 0; padding: 0; color: var(--gold); text-decoration: underline; }
+.confstats { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 14px 0; }
+.confstats div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.confstats b { display: block; font-size: 22px; color: var(--gold); }
+.confstats span { font-size: 12px; color: var(--muted); }
+.conftable { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
+.conftable th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line);
+  padding: 4px 8px; }
+.conftable td { border-bottom: 1px solid var(--line); padding: 5px 8px; vertical-align: top; word-break: break-word; }
+.confpre { max-height: 420px; overflow: auto; background: #0b0a08; border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px; font-size: 12px; white-space: pre; }
