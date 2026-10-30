@@ -1770,13 +1770,66 @@
 
   // ---- Character picker (a game-like character creation; the preferences panel stays for random rolls) ----
 
-  var STEP_LABEL = { player: 'Player', draft: 'Draft bans', faction: 'Faction', race: 'Race', 'class': 'Class & spec',
+  var STEP_LABEL = { player: 'Player', draft: 'Draft bans', race: 'Faction & race', 'class': 'Class & spec',
     profs: 'Professions', confirm: 'Confirm' };
 
   // The draft step only when the rules say so
   function wizardSteps() {
-    return state.party.pick === 'draft' ? ['player', 'draft', 'faction', 'race', 'class', 'profs', 'confirm'] :
-      ['player', 'faction', 'race', 'class', 'profs', 'confirm'];
+    return state.party.pick === 'draft' ? ['player', 'draft', 'race', 'class', 'profs', 'confirm'] :
+      ['player', 'race', 'class', 'profs', 'confirm'];
+  }
+
+  // The character creation screen's order
+  var BANNER_RACES = { alliance: ['1', '3', '4', '7', '11'], horde: ['2', '5', '6', '8', '10'] };
+
+  // A line about each race and class, and the racials the icons don't spell out
+  var RACE_INFO = {
+    1: { desc: 'Versatile and stubborn, humans rebuilt Stormwind and lead the Alliance.',
+      more: ['Expertise with swords and maces'] },
+    2: { desc: 'Freed from demonic corruption, the orcs forged a new Horde in Durotar.',
+      more: ['Pets deal more damage (Command)'] },
+    3: { desc: 'Sturdy mountain folk of Ironforge, born miners, smiths and explorers.',
+      more: ['Expertise with maces', 'Finds treasure on the minimap'] },
+    4: { desc: 'Ancient guardians of Kalimdor\'s forests, at home in the shadows.',
+      more: ['Harder to hit (Quickness)'] },
+    5: { desc: 'Undead who broke free of the Lich King and claim Lordaeron as their own.',
+      more: ['+10 Shadow resistance'] },
+    6: { desc: 'Gentle giants of the plains who walk in harmony with the Earth Mother.',
+      more: ['+10 Nature resistance'] },
+    7: { desc: 'Brilliant inventors, small in size and big on ideas (and explosions).',
+      more: ['+10 Arcane resistance'] },
+    8: { desc: 'Cunning jungle trolls of the Darkspear tribe, sworn to the Horde.',
+      more: ['Crit with bows and thrown weapons', 'Movement impairing effects 15% shorter'] },
+    10: { desc: 'Proud elves of Quel\'Thalas, drawn to magic in all its forms.',
+      more: [] },
+    11: { desc: 'Exiles from Argus who crashed on Azeroth and joined the Alliance.',
+      more: ['Jewelcrafting +5'] }
+  };
+  var CLASS_INFO = {
+    1: 'Plate armor and big weapons: charges in, takes hits or deals them.',
+    2: 'Holy warrior in plate who heals, protects or smites.',
+    3: 'Ranged fighter with a loyal pet, traps and a keen eye.',
+    4: 'Stealthy melee fighter with poisons, combo points and tricks.',
+    5: 'Healer of the party, or a master of shadow magic.',
+    6: 'Undead knight of runes and diseases; starts at level 55 in Ebon Hold.',
+    7: 'Calls on the elements with totems: lightning, melee or healing.',
+    8: 'Arcane, fire and frost spells from range, and food and portals for all.',
+    9: 'Curses, demons and fire from range; summons a demon to help.',
+    11: 'Shapeshifter who can tank, heal, or fight in melee or with spells.'
+  };
+
+  function roleSummary(cls) {
+    var roles = [];
+    SPEC_ROLES[cls].forEach(function (r) {
+      r.split(' / ').forEach(function (one) { if (roles.indexOf(one) < 0) roles.push(one); });
+    });
+    return roles.join(', ');
+  }
+
+  // Other players who have it (for the picker: you see what the party already is)
+  function takenBy(i, test) {
+    return state.players.filter(function (q, n) { return n !== i && q.roll && test(q.roll); })
+      .map(function (q) { return q.name; });
   }
   var wiz = null;
 
@@ -1853,16 +1906,16 @@
     var p = index >= 0 ? state.players[index] : null;
     var r = p && p.roll;
     wiz = {
-      step: p ? 'faction' : 'player', player: p ? index : -1, faction: r ? RACES[r.race].faction : '',
+      step: p ? wizardSteps()[1] : 'player', player: p ? index : -1, faction: r ? RACES[r.race].faction : '',
       race: r ? String(r.race) : '', gender: r ? r.gender : (p && p.settings.gender === 'f' ? 'f' : 'm'),
       cls: r ? String(r.cls) : '', spec: r && r.spec >= 0 ? r.cls + '-' + r.spec : '',
-      prof1: r ? r.profs[0] : -1, prof2: r ? r.profs[1] : -1, also: 'none', note: ''
+      prof1: r ? r.profs[0] : -1, prof2: r ? r.profs[1] : -1, also: 'none', note: '', hover: null
     };
     if (p && locked(p)) {
       wiz.step = 'player';
       wiz.note = '<span class="bad">' + esc(p.name) + '\'s hardcore roll is locked.</span>';
     }
-    enterStep(wiz.step, 1);
+    enterStep(wiz.step);
   }
 
   function closeWizard() {
@@ -1871,27 +1924,14 @@
     $('wizard').style.display = 'none';
   }
 
-  // Go to a step; a faction step with only one choice is taken for you (and skipped going back)
-  function enterStep(step, direction) {
+  function enterStep(step) {
     wiz.step = step;
-    if (step === 'faction') {
-      var open = factionChoices(wiz.player).filter(function (f) { return !f.why; });
-      if (open.length === 1) {
-        var closed = factionChoices(wiz.player).filter(function (f) { return f.why; })[0];
-        if (wiz.faction !== open[0].key) { wiz.race = ''; wiz.cls = ''; wiz.spec = ''; }
-        wiz.faction = open[0].key;
-        wiz.note = 'Only the ' + itemName('faction', open[0].key) + ' is available' + (closed ? ': the ' +
-          itemName('faction', closed.key) + ' is not (' + closed.why + ').' : '.');
-        enterStep(direction > 0 ? 'race' : 'player', direction);
-        return;
-      }
-    }
+    wiz.hover = null;
     renderWizard();
   }
 
   function stepReady(step) {
     if (step === 'player') return wiz.player >= 0;
-    if (step === 'faction') return !!wiz.faction;
     if (step === 'race') return !!wiz.race;
     if (step === 'class') return !!wiz.cls && !!wiz.spec;
     if (step === 'profs') return wiz.prof1 >= 0 && wiz.prof2 >= 0;
@@ -1907,6 +1947,98 @@
     return CLASSES[cls].name + ': ' + CLASSES[cls].specs.map(function (sp, n) {
       return sp + ' (' + SPEC_ROLES[cls][n] + ')';
     }).join(', ');
+  }
+
+  // The right-hand panel: the hovered race or class, else the selected one
+  function wizDetail() {
+    var w = wiz;
+    var i = w.player;
+    var hover = w.hover;
+    if (w.step === 'race') {
+      var race = hover && hover.type === 'race' ? hover.key : w.race;
+      if (!race) return '<p class="muted">Hover a race to see its racials and classes; click it to choose it.</p>';
+      var faction = RACES[race].faction;
+      var fc = factionChoices(i).filter(function (x) { return x.key === faction; })[0];
+      var rc = raceChoices(i, faction).filter(function (x) { return x.key === race; })[0];
+      var why = fc.why || (rc && rc.why);
+      var players = takenBy(i, function (r) { return String(r.race) === race; });
+      var classes = classChoices(i, race);
+      return '<div class="wd-head"><img src="' + itemIcon('race', race, w.gender) + '" alt=""><div><h3>' +
+        RACES[race].name + '</h3><span class="muted small">' + itemName('faction', faction) + '</span>' +
+        (why ? '<div class="bad small">Not available: ' + esc(why) + '</div>' : '') +
+        (players.length ? '<div class="small">Already in the party: ' + players.map(esc).join(', ') + '</div>' : '') +
+        '</div></div><p>' + RACE_INFO[race].desc + '</p><h4>Racials</h4><ul class="wd-list">' +
+        (RACIALS[race] || []).map(function (rac) {
+          return '<li><img src="img/racial/' + rac[1] + '.jpg" alt=""><span><b>' + rac[0] + '</b> ' + rac[2] +
+            '</span></li>';
+        }).join('') + RACE_INFO[race].more.map(function (line) {
+          return '<li><span class="dot"></span><span>' + line + '</span></li>';
+        }).join('') + '</ul><h4>Classes</h4><div class="wd-classes">' + classes.map(function (c) {
+          return '<div class="wd-class' + (c.why ? ' no' : '') + '" data-tip="' + esc(CLASSES[c.key].name +
+            (c.why ? ' (' + c.why + ')' : '')) + '"><img src="' + itemIcon('class', c.key) + '" alt=""><div><b>' +
+            CLASSES[c.key].name + '</b> <span class="muted small">' + roleSummary(c.key) + '</span>' +
+            '<div class="wd-specs">' +
+            CLASSES[c.key].specs.map(function (sp, n) {
+              return '<span data-tip="' + esc(sp + ': ' + SPEC_ROLES[c.key][n]) + '"><img src="' +
+                itemIcon('spec', c.key + '-' + n) + '" alt="">' + sp + '</span>';
+            }).join('') + '</div></div></div>';
+        }).join('') + '</div>';
+    }
+    var cls = hover && hover.type === 'class' ? hover.key : w.cls;
+    if (!cls) return '<p class="muted">Hover a class to see its specs; click a spec to choose it.</p>';
+    var cc = classChoices(i, w.race).filter(function (x) { return x.key === cls; })[0];
+    var inParty = takenBy(i, function (r) { return String(r.cls) === cls; });
+    return '<div class="wd-head"><img src="' + itemIcon('class', cls) + '" alt=""><div><h3>' + CLASSES[cls].name +
+      '</h3><span class="muted small">' + roleSummary(cls) + '</span>' +
+      (cc && cc.why ? '<div class="bad small">Not available: ' + esc(cc.why) + '</div>' : '') +
+      (inParty.length ? '<div class="small">Already in the party: ' + inParty.map(esc).join(', ') + '</div>' : '') +
+      '</div></div><p>' + CLASS_INFO[cls] + '</p><h4>Specs</h4><div class="wd-spec-cards">' +
+      specChoices(i, cls).map(function (sp) {
+        var n = Number(sp.key.split('-')[1]);
+        var why = (cc && cc.why) || sp.why;
+        var who = takenBy(i, function (r) { return r.cls + '-' + r.spec === sp.key; });
+        return '<div class="wcard' + (w.spec === sp.key ? ' sel' : '') + (why ? ' no' : '') + '" data-act="' +
+          (why ? '' : 'w-spec') + '" data-key="' + sp.key + '" data-tip="' + esc(CLASSES[cls].specs[n] +
+          (why ? ' (' + why + ')' : '')) + '"><img src="' + itemIcon('spec', sp.key) + '" alt=""><b>' +
+          CLASSES[cls].specs[n] + '</b><span class="role">' + SPEC_ROLES[cls][n] + '</span>' +
+          (who.length ? '<span class="muted small">' + who.map(esc).join(', ') + ' has it</span>' : '') +
+          (why ? '<span class="bad small">' + esc(why) + '</span>' : '') + '</div>';
+      }).join('') + '</div>';
+  }
+
+  // Random within what is open: a race, a class and spec, or two professions
+  function wizardRandom() {
+    var w = wiz;
+    var i = w.player;
+    if (w.step === 'race') {
+      var open = [];
+      factionChoices(i).forEach(function (f) {
+        if (!f.why) raceChoices(i, f.key).forEach(function (r) { if (!r.why) open.push(r.key); });
+      });
+      if (!open.length) { w.note = 'No race is open.'; return; }
+      w.race = pickOne(open);
+      w.faction = RACES[w.race].faction;
+      w.cls = ''; w.spec = '';
+      w.note = 'Random race: ' + RACES[w.race].name + '.';
+    } else if (w.step === 'class') {
+      var classes = classChoices(i, w.race).filter(function (c) { return !c.why; });
+      if (!classes.length) { w.note = 'No class is open for this race.'; return; }
+      w.cls = pickOne(classes).key;
+      w.spec = pickOne(specChoices(i, w.cls).filter(function (sp) { return !sp.why; })).key;
+      w.note = 'Random: ' + itemName('spec', w.spec) + '.';
+    } else if (w.step === 'profs') {
+      var pairs = [];
+      profChoices(i, 1, -1).forEach(function (a) {
+        if (a.why) return;
+        profChoices(i, 2, Number(a.key)).forEach(function (b) {
+          if (!b.why) pairs.push([Number(a.key), Number(b.key)]);
+        });
+      });
+      if (!pairs.length) { w.note = 'No two professions fit the rules.'; return; }
+      var pair = pickOne(pairs);
+      w.prof1 = pair[0]; w.prof2 = pair[1];
+      w.note = 'Random: ' + PROFESSIONS[pair[0]].name + ' and ' + PROFESSIONS[pair[1]].name + '.';
+    }
   }
 
   function renderWizard() {
@@ -1950,43 +2082,34 @@
                 CLASSES[key.split('-')[0]].specs[key.split('-')[1]] : name) + '</span>' : '') + '</div>';
           }).join('') + '</div>';
         }).join('');
-    } else if (w.step === 'faction') {
-      body = '<div class="wgrid big">' + factionChoices(i).map(function (f) {
-        return wizCard('w-faction', f.key, w.faction === f.key, f.why, '<img src="' + itemIcon('faction', f.key) +
-          '" alt=""><b>' + itemName('faction', f.key) + '</b>', itemName('faction', f.key));
-      }).join('') + '</div>';
     } else if (w.step === 'race') {
-      body = '<div class="wtoolbar">Gender: ' + ['m', 'f'].map(function (g) {
-        return '<button class="' + (w.gender === g ? '' : 'quiet ') + 'small-btn" data-act="w-gender" data-key="' + g +
-          '">' + (g === 'm' ? 'Male' : 'Female') + '</button>';
-      }).join(' ') + '</div><div class="wraces">' + raceChoices(i, w.faction).map(function (r) {
-        var race = RACES[r.key];
-        var inner = '<img class="face" src="' + itemIcon('race', r.key, w.gender) + '" alt="">' +
-          '<div class="wrace-text">' +
-          '<b>' + race.name + '</b><div class="wrow">' + (RACIALS[r.key] || []).map(function (rac) {
-            return '<img src="img/racial/' + rac[1] + '.jpg" alt="" data-tip="' + esc(rac[0] + ': ' + rac[2]) + '">';
-          }).join('') + '</div><div class="wrow">' + COMBOS[r.key].map(String).filter(function (c) {
-            return inEra('class', c, state.era);
-          }).map(function (c) {
-            return '<img class="' + (banned('class', c) ? 'gone' : '') + '" src="' + itemIcon('class', c) +
-              '" alt="" data-tip="' + esc(specsTip(c)) + '">';
-          }).join('') + '</div></div>';
-        return wizCard('w-race', r.key, w.race === r.key, r.why, inner, race.name);
-      }).join('') + '</div>';
-    } else if (w.step === 'class') {
-      body = '<div class="wbanners">' + classChoices(i, w.race).map(function (c) {
-        return wizCard('w-class', c.key, w.cls === c.key, c.why, '<img src="' + itemIcon('class', c.key) + '" alt="">' +
-          '<b>' + CLASSES[c.key].name + '</b>', specsTip(c.key));
-      }).join('') + '</div>';
-      if (w.cls) {
-        body += '<h3 class="wsub">' + CLASSES[w.cls].name + ' specs</h3><div class="wgrid">' +
-          specChoices(i, w.cls).map(function (sp) {
-            var n = Number(sp.key.split('-')[1]);
-            return wizCard('w-spec', sp.key, w.spec === sp.key, sp.why, '<img src="' + itemIcon('spec', sp.key) +
-              '" alt=""><b>' + CLASSES[w.cls].specs[n] + '</b><span class="role">' + SPEC_ROLES[w.cls][n] + '</span>',
-              CLASSES[w.cls].specs[n]);
+      var factions = factionChoices(i);
+      var genders = [['m', 'Male'], ['f', 'Female'], ['random', 'Random']];
+      body = '<div class="wtoolbar">Gender: ' + genders.map(function (g) {
+        return '<button class="' + (g[0] !== 'random' && w.gender === g[0] ? '' : 'quiet ') + 'small-btn" ' +
+          'data-act="w-gender" data-key="' + g[0] + '">' + g[1] + '</button>';
+      }).join(' ') + '</div><div class="wcreate">' + ['alliance', 'horde'].map(function (f) {
+        var fc = factions.filter(function (x) { return x.key === f; })[0];
+        var races = raceChoices(i, f);
+        return '<div class="wbanner ' + f + (fc.why ? ' closed' : '') + '"><h3>' + itemName('faction', f) + '</h3>' +
+          (fc.why ? '<div class="wclosed">' + esc(fc.why) + '</div>' : '') +
+          BANNER_RACES[f].map(function (key) {
+            var r = races.filter(function (x) { return x.key === key; })[0];
+            if (!r) return '';
+            var why = fc.why || r.why;
+            return '<div class="wrace' + (w.race === key ? ' sel' : '') + (why ? ' no' : '') + '" data-act="' +
+              (why ? '' : 'w-race') + '" data-key="' + key + '" data-hover="race:' + key + '"><span class="icw">' +
+              '<img src="' + itemIcon('race', key, w.gender) + '" alt=""></span><span class="wrace-name">' +
+              RACES[key].name + '</span></div>';
           }).join('') + '</div>';
-      }
+      }).join('') + '<div class="wdetail" id="wdetail">' + wizDetail() + '</div></div>';
+    } else if (w.step === 'class') {
+      body = '<div class="wcreate"><div class="wclasses">' + classChoices(i, w.race).map(function (c) {
+        return '<div class="wclass' + (w.cls === c.key ? ' sel' : '') + (c.why ? ' no' : '') + '" data-act="' +
+          (c.why ? '' : 'w-class') + '" data-key="' + c.key + '" data-hover="class:' + c.key + '"><span class="icw">' +
+          '<img src="' + itemIcon('class', c.key) + '" alt=""></span><span><b>' + CLASSES[c.key].name + '</b>' +
+          '<span class="muted small">' + roleSummary(c.key) + '</span></span></div>';
+      }).join('') + '</div><div class="wdetail wide" id="wdetail">' + wizDetail() + '</div></div>';
     } else if (w.step === 'profs') {
       body = '<p class="muted">Gathering professions collect materials; crafting ones turn them into items. A pair ' +
         'that supplies itself (Mining + Blacksmithing) is easiest solo.</p><div class="wprofs">' +
@@ -1996,10 +2119,17 @@
         return '<div><h3 class="wsub">Profession ' + slot + '</h3><div class="wlist">' +
           profChoices(i, slot, other).map(function (c) {
             var prof = Number(c.key);
+            var holders = state.players.map(function (q, n) {
+              if (n === i || !q.roll) return '';
+              var at = q.roll.profs.indexOf(prof);
+              return at >= 0 ? q.name + ' (Profession ' + (at + 1) + ')' : '';
+            }).filter(Boolean);
             return wizCard('w-prof' + slot, c.key, mine === prof, c.why, '<img src="' + itemIcon('prof1', c.key) +
               '" alt=""><span><b>' + PROFESSIONS[prof].name + '</b><span class="muted small">' +
-              (c.why === 'already picked' ? 'Already picked' : professionNote(prof)) + '</span></span>',
-              PROFESSIONS[prof].name);
+              (c.why === 'already picked' ? 'Already picked' : professionNote(prof)) + '</span>' +
+              (holders.length ? '<span class="small">Has it: ' + holders.map(esc).join(', ') + '</span>' : '') +
+              (c.why && c.why !== 'already picked' ? '<span class="bad small">' + esc(c.why) + '</span>' : '') +
+              '</span>', PROFESSIONS[prof].name);
           }).join('') + '</div></div>';
       }).join('') + '</div>';
     } else {
@@ -2033,8 +2163,10 @@
 
     $('wizard').style.display = 'flex';
     $('wizard').innerHTML = '<div class="wizard"><div class="whead"><b>Pick a character' + (p ? ': ' + esc(p.name) :
-      '') + '</b><button class="quiet small-btn" data-act="w-close" data-tip="Close without changing anything">' +
-      '&#x2715;</button></div><div class="wsteps">' + nav + '</div>' +
+      '') + '</b><span class="spacer"></span>' + (['race', 'class', 'profs'].indexOf(w.step) >= 0 ?
+        '<button class="quiet small-btn" data-act="w-random" data-tip="Pick at random among what is open">' +
+        '&#x2684; Random</button> ' : '') + '<button class="quiet small-btn" data-act="w-close" ' +
+      'data-tip="Close without changing anything">&#x2715;</button></div><div class="wsteps">' + nav + '</div>' +
       (w.note ? '<p class="wnote">' + w.note + '</p>' : '') + '<div class="wbody">' + body + '</div>' +
       '<div class="wfoot"><button class="quiet" data-act="w-back"' + (at === 0 ? ' disabled' : '') + '>Back</button>' +
       '<span class="spacer"></span><a href="#prefs-title" data-act="w-advanced">Advanced preferences (chances, ' +
@@ -2124,34 +2256,39 @@
         w.cls = ''; w.spec = '';
       }
       render();
-    } else if (act === 'w-faction') {
-      if (w.faction !== key) { w.race = ''; w.cls = ''; w.spec = ''; }
-      w.faction = key;
-      enterStep('race', 1);
-      return true;
     } else if (act === 'w-gender') {
-      w.gender = key;
+      if (key === 'random') {
+        var before = w.gender;
+        w.gender = pickOne(['m', 'f']);
+        var names = { m: 'Male', f: 'Female' };
+        w.note = before === w.gender ? 'No change, you got the same gender (' + names[w.gender] + ').' :
+          'Changed: you were ' + names[before] + ', now you\'re ' + names[w.gender] + '.';
+      } else {
+        w.gender = key;
+      }
+    } else if (act === 'w-random') {
+      wizardRandom();
     } else if (act === 'w-race') {
       if (w.race !== key) { w.cls = ''; w.spec = ''; }
       w.race = key;
-      enterStep('class', 1);
-      return true;
+      w.faction = RACES[key].faction;
     } else if (act === 'w-class') {
       if (w.cls !== key) w.spec = '';
       w.cls = key;
     } else if (act === 'w-spec') {
       w.spec = key;
+      w.cls = key.split('-')[0];
     } else if (act === 'w-prof1' || act === 'w-prof2') {
       var prof = Number(key);
       if (act === 'w-prof1') w.prof1 = prof; else w.prof2 = prof;
     } else if (act === 'w-go') {
-      enterStep(key, wizardSteps().indexOf(key) >= wizardSteps().indexOf(w.step) ? 1 : -1);
+      enterStep(key);
       return true;
     } else if (act === 'w-back') {
-      enterStep(wizardSteps()[Math.max(0, wizardSteps().indexOf(w.step) - 1)], -1);
+      enterStep(wizardSteps()[Math.max(0, wizardSteps().indexOf(w.step) - 1)]);
       return true;
     } else if (act === 'w-next') {
-      if (stepReady(w.step)) enterStep(wizardSteps()[wizardSteps().indexOf(w.step) + 1], 1);
+      if (stepReady(w.step)) enterStep(wizardSteps()[wizardSteps().indexOf(w.step) + 1]);
       return true;
     } else if (act === 'w-confirm') {
       var also = document.getElementById('w-also');
@@ -2534,6 +2671,15 @@
     else if (wiz) closeWizard();
   });
   $('wizard').addEventListener('click', function (e) { if (e.target === this) closeWizard(); });
+  // Hovering a race or class shows it in the panel (only the panel is redrawn, so the hover stays)
+  $('wizard').addEventListener('mouseover', function (e) {
+    var el = e.target.closest ? e.target.closest('[data-hover]') : null;
+    if (!wiz || !el || !$('wdetail')) return;
+    var parts = el.getAttribute('data-hover').split(':');
+    if (wiz.hover && wiz.hover.type === parts[0] && wiz.hover.key === parts[1]) return;
+    wiz.hover = { type: parts[0], key: parts[1] };
+    $('wdetail').innerHTML = wizDetail();
+  });
 
   // Hover names
   var tip = $('tip');
