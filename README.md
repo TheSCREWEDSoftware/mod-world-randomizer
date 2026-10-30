@@ -19,12 +19,15 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore", based on
 - **Quests** of a moved zone move with it (`Randomizer.Quests.Shift`): their level, so the XP and the colour in the
   quest log follow, their level requirement and their reward money. Elwynn Forest in 41-50 has level 41-50 quests
   that can be taken from level 41 (`Randomizer.Quests.MinLevelFromBracket`: the bottom of the zone's bracket).
-  `.randomizer quests` lists the levels before and after. Class, profession and holiday quests keep their levels. This is the same for every
+  `.randomizer quests` lists the levels before and after. Class, profession and holiday quests keep their levels. This
+  is the same for every
   player, so it changes the quests in memory at startup rather than through the core's quest level hook (that hook
-  is per player, which mod-dynamic-scaling needs and this module doesn't).
+  is per player, which [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling) needs and this
+  module doesn't).
 - **Dungeons** follow the bracket their entrance zone landed in. By default (`Randomizer.Dungeons.Mode = 2`) their
   creatures scale to the group's level but stay inside that bracket: Ragefire Chasm in a 31-40 bracket scales
-  between 31 and 40, bosses still above their trash. This works on its own; with mod-dynamic-scaling installed and
+  between 31 and 40, bosses still above their trash. This works on its own; with
+  [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling) installed and
   the collective on, that module does it instead and adds its Simple mode buff.
 - **New characters** start at a graveyard in a bracket 1 zone of their own faction (then contested zones), with
   the hearthstone set there. Death Knights keep Ebon Hold.
@@ -33,7 +36,8 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore", based on
 
 - **Hardcore** (optional): one life, chosen by the player (`.hardcore on confirm`) or forced for every new
   character. Choosing it is only for a fresh character: level 1, nothing but its starting gear and starting money,
-  and no mail received or trade made, ever. A dead hardcore character is never deleted for good: it is soft deleted with the core's own unlink
+  and no mail received or trade made, ever. A dead hardcore character is never deleted for good: it is soft deleted with
+  the core's own unlink
   (or locked, or left a ghost), and `world_randomizer_hardcore` keeps it with its owner account, level, killer and
   date. A bugged death is undone with `.hardcore restore <name or GUID> [reason]`.
 
@@ -94,7 +98,8 @@ The character roller, the world map and the config update page:
 3. `Randomizer.Brackets.FactionStarts` (on by default) makes sure each faction has one of its own zones in bracket 1,
    so players don't all land in contested zones (without it both factions get one in about 1 seed out of 8).
 4. Playing together: one player types `.coop create` right away (level 1) and shares the code; the others type
-   `.coop join <code>` and are moved to the leader's start, hearthstone included. The seed is kept in the characters DB, so the world stays the same
+   `.coop join <code>` and are moved to the leader's start, hearthstone included. The seed is kept in the characters DB,
+   so the world stays the same
 across restarts until you reroll it.
 
 ## Web pages (`web/`)
@@ -131,7 +136,8 @@ as the `web/` submodule (getting it: [Website](#website)). Online at
   search. `tools/generate_achievements.py` writes its data (`web/achievements.js`) along with the SQL.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
-- `config.html`: drop the `.conf` your server uses for this module or mod-dynamic-scaling and get it back in the
+- `config.html`: drop the `.conf` your server uses for this module or
+  [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling) and get it back in the
   newest layout: your values kept, new settings added with their default, removed ones kept at the end under a
   note. It lists what changed, and downloads the old file (backup) and the new one. The templates are in
   `web/conf-templates.js`; `python3 tools/make_conf_templates.py` rebuilds it after a `.conf.dist` changes.
@@ -158,7 +164,8 @@ World DB:
   borders across water and boat links), for `Randomizer.Brackets.Adjacent`.
 - `world_randomizer_instance`: entrance zone per instance where the area trigger lookup can't find one (city
   entrances: Ragefire Chasm, the Stockade, the Violet Hold).
-- `world_randomizer_dungeon_bracket`: written at startup for mod-dynamic-scaling (collective).
+- `world_randomizer_dungeon_bracket`: written at startup for
+  [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling) (collective).
 - `world_randomizer_spawn_zone`: cache. Most `creature` rows have `zoneId = 0`; the first start works their
   zones out from the terrain (slow once) and keeps them here.
 - `world_randomizer_levelstats` / `world_randomizer_classlevelstats`: era 1 Vanilla (vMaNGOS world database
@@ -249,7 +256,8 @@ Each achievement also has an `expansion` mask (1 Vanilla, 2 TBC, 4 Wrath, added 
 for `Randomizer.Achievements.Expansion` count (by default it follows the stats era); the addon shows the content
 of each version and lists the others when you hover it.
 
-The shipped list is the original (Vanilla) creator's. Its Vanilla rows keep their ids; TBC versions are id + 2000 and
+The shipped list is from [UncleChimpus](https://www.youtube.com/@UncleChimpuss/playlists)'s series. Its Vanilla
+rows keep their ids; TBC versions are id + 2000 and
 Wrath versions id + 4000. What changes per expansion:
 
 | Achievements | Vanilla | TBC | Wrath |
@@ -271,8 +279,12 @@ Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach prof
 ### The addon
 
 `addon/RandomizerAchievements` is a WoW 3.3.5 addon: copy the folder into the client's `Interface\AddOns`, or
-download `RandomizerAchievements.zip` from the repository's Releases (every addon version gets a release
-by itself when it reaches GitHub, `.github/workflows/addon-release.yml`) and unzip it there.
+download `RandomizerAchievements.zip` from the repository's Releases and unzip it there.
+
+Releasing a new addon version (maintainers): GitHub > Actions > **Addon release** > Run workflow, and type the
+version (a whole number, e.g. 5). The workflow writes it to the `.toc`, the addon's `ADDON_VERSION` and the module's
+`RANDOMIZER_ADDON_VERSION`, commits that to the branch, then makes the `v5` release with the zip
+(`.github/workflows/addon-release.yml`). Releases happen only this way, never by themselves.
 `/randach` opens a window with the categories, each achievement's icon, rewards, description and progress bar, and
 buttons for each party / raid member to see their account's achievements and this run's stats. It talks to the
 server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
@@ -309,12 +321,14 @@ cap (60 / 70) stats keep AzerothCore's growth from there.
 With both modules enabled and both collective switches on (`Randomizer.Collective.DynamicScaling` here,
 `DynamicScaling.Collective.WorldRandomizer` there, both on by default), each reads the other's settings from the
 config and they split the work: this module writes every dungeon's bracket (from its entrance zone) to
-`world_randomizer_dungeon_bracket`, and mod-dynamic-scaling scales those dungeons in Simple mode inside that
+`world_randomizer_dungeon_bracket`, and [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling)
+scales those dungeons in Simple mode inside that
 bracket (Ragefire Chasm in a 31-40 bracket scales between 31 and 40). With `DynamicScaling.Collective.WorldScaling`
 (on by default) it also scales the open world inside each zone's bracket (written to
 `world_randomizer_zone_bracket`): creatures follow each player's level and `.scaling` choice but never leave the
 zone's bracket, so a level 1 player in Bloodmyst Isle (1-10) meets level 1 creatures, and this module stops
-remapping open world levels; without it, mod-dynamic-scaling leaves the open world alone. Dungeons
+remapping open world levels; without it,
+[mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling) leaves the open world alone. Dungeons
 with a city entrance follow the zone around the city (`world_randomizer_instance`: Ragefire Chasm follows
 Durotar, the Stockade Elwynn Forest, the Violet Hold Crystalsong Forest).
 
@@ -344,17 +358,21 @@ back to their accounts.
   zone it is sorted under; dungeon quests keep their levels.
 - Replaced creatures keep the spawn's waypoints, mounts and auras from `creature_addon`.
 - Dungeon trash and bosses keep their entries (boss scripts depend on them); only their levels move.
-- Without mod-dynamic-scaling, dungeon levels are picked when creatures spawn, from the players inside at that
+- Without [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling), dungeon levels are picked
+  when creatures spawn, from the players inside at that
   moment; someone joining later doesn't move creatures that are already up. The collective rescales them.
 - A seed shows the same world on the map page only while `world_randomizer_zone` matches `web/zones.js`.
 
 ## Credits
 
-- **[UncleChimpus](https://www.youtube.com/@UncleChimpuss/playlists)**, whose **HC Randomized WoW** series this module
-  is based on:
+- **[UncleChimpus](https://www.youtube.com/@UncleChimpuss/playlists)**, whose **HC Randomized WoW** series
+  (made on vMaNGOS, Vanilla) this module is based on:
   - [I Randomized All of WoW Classic. Then I Did Hardcore](https://youtu.be/JjyZIukvaHg): the randomized world and
     the achievements.
   - [The World is Being Corrupted](https://www.youtube.com/watch?v=StYmBXcMWY8&list=PLTBbvJMyl1ksWwy8Zfic6vQYi3V0OrjyE):
     the achievement rewards.
+
+  This module recreates the series' ideas for AzerothCore (WotLK 3.3.5a): the shuffled world, and the achievements
+  with their rewards. It adds the TBC and Wrath versions, co-op starts, rolls and the website.
 - Player base stats per era: AzerothCore (Wrath), cMaNGOS-TBC (TBC) and vMaNGOS (Vanilla) world databases.
 
