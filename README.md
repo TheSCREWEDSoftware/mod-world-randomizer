@@ -74,7 +74,10 @@ across restarts until you reroll it.
 
 ## Web pages (`web/`)
 
-Plain HTML + JavaScript, no build step.
+Plain HTML + JavaScript, no build step. They live in their own repository,
+[mod-world-randomizer-website](https://github.com/TheSCREWEDSoftware/mod-world-randomizer-website), included here
+as the `web/` submodule: clone with `git clone --recursive`, or run `git submodule update --init` in an existing
+clone. Online at <https://thescrewedsoftware.github.io/mod-world-randomizer-website/>.
 
 - `index.html`: character roller, for one player or a party (up to 40, two per row). Each player rolls a race
   (shown as its face and gender), class, spec and two professions, and can reroll everything or one of them, plus
@@ -106,8 +109,8 @@ Plain HTML + JavaScript, no build step.
   note. It lists what changed, and downloads the old file (backup) and the new one. The templates are in
   `web/conf-templates.js`; `python3 tools/make_conf_templates.py` rebuilds it after a `.conf.dist` changes.
 
-To put the pages online (GitHub Pages), `tools/publish_web.sh <your github.io clone>` copies `web/` into it as
-`world-randomizer/`; commit and push that site.
+After changing the pages (or regenerating `web/zones.js` / `web/conf-templates.js`), commit inside `web/` and push
+the website repository, then commit the new `web` commit here. GitHub Pages serves the website repository as it is.
 
 `web/randomizer.js` is the same shuffle as `WorldRandomizer.cpp` (same generator, same order), so a seed shows
 exactly the world the server will build. Tested for 72 seed / scope / balance / adjacency combinations against the
@@ -240,7 +243,9 @@ Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach prof
 
 ### The addon
 
-`addon/RandomizerAchievements` is a WoW 3.3.5 addon: copy the folder into the client's `Interface\AddOns`.
+`addon/RandomizerAchievements` is a WoW 3.3.5 addon: copy the folder into the client's `Interface\AddOns`, or
+download `RandomizerAchievements-v<version>.zip` from the repository's Releases (every addon version gets a release
+by itself when it reaches GitHub, `.github/workflows/addon-release.yml`) and unzip it there.
 `/randach` opens a window with the categories, each achievement's icon, rewards, description and progress bar, and
 buttons for each party / raid member to see their account's achievements and this run's stats. It talks to the
 server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
