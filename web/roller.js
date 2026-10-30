@@ -1689,7 +1689,9 @@
         '</div><div class="items' + (cat === 'spec' ? ' specs' : '') + '">' + items + '</div></div>';
     });
 
-    html += '<p style="margin:12px 0 0"><button class="quiet" data-act="prefs-default">Back to default</button> ' +
+    html += '<p style="margin:12px 0 0"><button class="quiet" data-act="prefs-default">Reset ' + esc(p.name) +
+      '\'s preferences</button> ' + (state.players.length > 1 ? '<button class="quiet" ' +
+      'data-act="prefs-default-all">Reset everyone\'s preferences</button> ' : '') +
       (state.players.length > 1 ? '<button class="quiet" data-act="prefs-copy">Use these for every player</button>' :
         '') + '</p>';
     $('prefs').innerHTML = html;
@@ -2164,6 +2166,41 @@
     return true;
   }
 
+  // ---- Asking before resets and deletes ----
+  // Each kind of question can be switched off with "Do not ask again" (kept in this browser); "Ask again" in the
+  // top panel brings them all back.
+
+  var NOASK_KEY = 'wr-noask';
+
+  function noAsk() {
+    try { return JSON.parse(localStorage.getItem(NOASK_KEY) || '{}') || {}; } catch (e) { return {}; }
+  }
+
+  function confirmAction(kind, title, text, okLabel, onOk) {
+    if (noAsk()[kind]) { onOk(); render(); return; }
+    var box = $('confirm');
+    box.innerHTML = '<div class="wizard confirm"><div class="whead"><b>' + esc(title) + '</b></div>' +
+      '<div class="wbody" style="min-height:0">' + text + '<label class="check" style="margin-top:14px">' +
+      '<input type="checkbox" id="confirm-noask"> Do not ask again</label></div><div class="wfoot">' +
+      '<button class="quiet" id="confirm-no">Cancel</button><span class="spacer"></span>' +
+      '<button class="danger" id="confirm-yes">' + esc(okLabel) + '</button></div></div>';
+    box.style.display = 'flex';
+    function close() { box.style.display = 'none'; box.innerHTML = ''; }
+    $('confirm-no').onclick = close;
+    box.onclick = function (e) { if (e.target === box) close(); };
+    $('confirm-yes').onclick = function () {
+      if ($('confirm-noask').checked) {
+        var flags = noAsk();
+        flags[kind] = true;
+        try { localStorage.setItem(NOASK_KEY, JSON.stringify(flags)); } catch (e) { /* storage blocked */ }
+      }
+      close();
+      onOk();
+      render();
+    };
+    $('confirm-yes').focus();
+  }
+
   // ---- Events ----
 
   function copyText(text, done) {
@@ -2207,14 +2244,23 @@
       });
     } else if (act === 'clear') {
       var cleared = state.players[index];
-      cleared.roll = null;
-      cleared.counts = zeroCounts();
-      cleared.decks = {};
+      confirmAction('clear', 'Clear ' + cleared.name + '\'s roll?', '<p>Their roll and reroll counts are cleared; ' +
+        'the player and their preferences stay.</p>', 'Clear roll', function () {
+        cleared.roll = null;
+        cleared.counts = zeroCounts();
+        cleared.decks = {};
+      });
+      return;
     } else if (act === 'remove') {
       if (index < 1) return; // player 1 leads the party (.coop create) and stays
-      state.players.splice(index, 1);
-      renumberPlayers();
-      state.tab = Math.min(state.tab, state.players.length - 1);
+      var removed = state.players[index];
+      confirmAction('remove', 'Remove ' + removed.name + '?', '<p>The player, their roll, preferences and draft ' +
+        'bans are deleted from this page.</p>', 'Remove', function () {
+        state.players.splice(state.players.indexOf(removed), 1);
+        renumberPlayers();
+        state.tab = Math.min(state.tab, state.players.length - 1);
+      });
+      return;
     } else if (act === 'seed') {
       newWorldSeed();
     } else if (act === 'item') {
@@ -2232,7 +2278,9 @@
       }
       p.decks[cat] = [];
     } else if (act === 'deck') {
-      p.decks[cat] = [];
+      confirmAction('deck', 'Reshuffle the deck?', '<p>Every ' + CAT_LABEL[cat].toLowerCase() + ' goes back in ' +
+        esc(p.name) + '\'s shuffle deck.</p>', 'Reshuffle', function () { p.decks[cat] = []; });
+      return;
     } else if (act === 'all-on') {
       KEYS[cat].forEach(function (k) { p.settings.cats[cat].allow[k] = true; });
     } else if (act === 'ban') {
@@ -2240,10 +2288,22 @@
       var bkey = el.getAttribute('data-key');
       bans[bkey] = !bans[bkey];
     } else if (act === 'unban') {
-      state.party.ban = defaultRules().ban;
+      confirmAction('unban', 'Allow everything?', '<p>Every ban in the rules is lifted (draft bans stay).</p>',
+        'Allow everything', function () { state.party.ban = { faction: {}, race: {}, cls: {}, spec: {}, prof: {} }; });
+      return;
     } else if (act === 'prefs-default') {
-      p.settings = defaultSettings();
-      p.decks = {};
+      confirmAction('prefs-default', 'Reset ' + p.name + '\'s preferences?', '<p>Back to the default preferences ' +
+        '(everything on except Death Knights, Random everywhere).</p>', 'Reset preferences', function () {
+        p.settings = defaultSettings();
+        p.decks = {};
+      });
+      return;
+    } else if (act === 'prefs-default-all') {
+      confirmAction('prefs-default-all', 'Reset everyone\'s preferences?', '<p>Every player\'s preferences go ' +
+        'back to the defaults.</p>', 'Reset all preferences', function () {
+        state.players.forEach(function (q) { q.settings = defaultSettings(); q.decks = {}; });
+      });
+      return;
     } else if (act === 'prefs-copy') {
       state.players.forEach(function (q) {
         if (q !== p) { q.settings = JSON.parse(JSON.stringify(p.settings)); q.decks = {}; }
@@ -2333,10 +2393,12 @@
     reader.readAsText(file);
   });
   $('rules-default').addEventListener('click', function () {
-    state.party = defaultRules();
-    state.players.forEach(function (q) { q.draft = emptyDraft(); });
-    message('Rules back to roller-config.js.', 'good');
-    render();
+    confirmAction('rules-default', 'Default rules?', '<p>The rules go back to roller-config.js, and every draft ' +
+      'ban is lifted.</p>', 'Default rules', function () {
+      state.party = defaultRules();
+      state.players.forEach(function (q) { q.draft = emptyDraft(); });
+      message('Rules back to roller-config.js.', 'good');
+    });
   });
   $('compat').addEventListener('change', function () { state.party.compat = this.value; render(); });
 
@@ -2350,9 +2412,77 @@
     render();
   });
   $('reset').addEventListener('click', function () {
-    state.players.forEach(function (p) { p.roll = null; p.counts = zeroCounts(); p.decks = {}; });
-    message('');
-    render();
+    confirmAction('clear-all', 'Clear every roll?', '<p>Every player\'s roll (locked hardcore ones too) and reroll ' +
+      'counts are cleared; players, names and preferences stay.</p>', 'Clear all rolls', function () {
+      state.players.forEach(function (p) { p.roll = null; p.counts = zeroCounts(); p.decks = {}; });
+      message('');
+    });
+  });
+
+  $('reset-all').addEventListener('click', function () {
+    confirmAction('reset-all', 'Reset everything?', '<p>Back to the start: one player with the default ' +
+      'preferences, the rules from roller-config.js, no rolls or counts. The world seed stays. Save the page to a ' +
+      'file first if you want it back later.</p>', 'Reset everything', function () {
+      state = defaultState();
+      closeWizard();
+      message('Everything is back to the start.', 'good');
+    });
+  });
+  $('ask-again').addEventListener('click', function (e) {
+    e.preventDefault();
+    try { localStorage.removeItem(NOASK_KEY); } catch (err) { /* storage blocked */ }
+    message('Resets and deletes ask first again.', 'good');
+    renderWorld();
+  });
+
+  // The page as a link: index.html#<party code>
+  function pageLink() {
+    return location.href.split('#')[0] + '#' + partyCode();
+  }
+
+  $('link-copy').addEventListener('click', function () {
+    copyText(pageLink(), function () { message('Link copied.', 'good'); renderWorld(); });
+  });
+
+  // The whole page as a file: the saved state, and the world map settings
+  $('page-save').addEventListener('click', function () {
+    var data = { roller: 'mod-world-randomizer', v: 1, state: state, map: worldSettings() };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'roller-page.json';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(function () { URL.revokeObjectURL(link.href); document.body.removeChild(link); }, 0);
+  });
+  $('page-load').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        if (data.roller !== 'mod-world-randomizer' || !data.state || !Array.isArray(data.state.players)) {
+          throw new Error('not a page file');
+        }
+        try {
+          localStorage.setItem(STATE_KEY, JSON.stringify(data.state));
+          if (data.map) localStorage.setItem('wr-map', JSON.stringify(data.map));
+        } catch (e) { /* storage blocked: loaded for this visit only */ }
+        var loaded = data.state;
+        loaded.party = normalizeRules(loaded.party);
+        loaded.players.forEach(function (p, i) { normalizePlayer(p, i + 1); });
+        if (ERAS.indexOf(loaded.era) < 0) loaded.era = 'wrath';
+        if (!(loaded.tab < loaded.players.length)) loaded.tab = 0;
+        state = loaded;
+        message('Page loaded from ' + esc(file.name) + '.', 'good');
+      } catch (e) {
+        message('That file is not a saved roller page.');
+      }
+      $('page-load').value = '';
+      render();
+    };
+    reader.readAsText(file);
   });
 
   $('party-copy').addEventListener('click', function () {
@@ -2382,7 +2512,10 @@
   });
 
   $('codes-add').addEventListener('click', function () { loadCodes($('load-codes').value, false); render(); });
-  $('codes-replace').addEventListener('click', function () { loadCodes($('load-codes').value, true); render(); });
+  $('codes-replace').addEventListener('click', function () {
+    confirmAction('replace', 'Replace the party?', '<p>The players on this page are replaced by the ones in the ' +
+      'codes.</p>', 'Replace', function () { loadCodes($('load-codes').value, true); });
+  });
 
   ['trade-a', 'trade-b', 'trade-sa', 'trade-sb'].forEach(function (id) {
     $(id).addEventListener('change', function () { updateTradePreview(); });
@@ -2395,7 +2528,11 @@
   });
 
   // The picker closes with Escape or a click outside it
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && wiz) closeWizard(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if ($('confirm').style.display === 'flex') { $('confirm').style.display = 'none'; $('confirm').innerHTML = ''; }
+    else if (wiz) closeWizard();
+  });
   $('wizard').addEventListener('click', function (e) { if (e.target === this) closeWizard(); });
 
   // Hover names
@@ -2421,6 +2558,12 @@
     partyCode: partyCode, loadCodes: loadCodes, message: function () { return lastMessage; }, newPlayer: newPlayer,
     render: render
   };
+
+  // Opened from a link (index.html#WR5...): load that party, rules and seed
+  if (/^#WR[45]\./.test(location.hash)) {
+    loadCodes(decodeURIComponent(location.hash.slice(1)), true);
+    history.replaceState(null, '', location.href.split('#')[0]);
+  }
 
   render();
 })();

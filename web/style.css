@@ -422,3 +422,6 @@ code { background: #0b0a08; padding: 0 4px; border-radius: 3px; }
   border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 14px;
   font: 600 13px/1.2 system-ui, sans-serif; }
 .filebtn:hover { filter: brightness(1.15); }
+
+button.danger { color: #ff8a7a; border-color: #6b2a24; }
+.wizard.confirm { max-width: 460px; margin-top: 12vh; }

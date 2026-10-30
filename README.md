@@ -94,6 +94,9 @@ Plain HTML + JavaScript, no build step.
   professions first, 1 of each by default). "Pick" opens a step by step character picker (faction, race with its
   racials, class and spec with its role, professions with what they go with, confirm). Defaults live in
   `web/roller-config.js`; "Save rules file" / "Load rules file" keep and share a rule set.
+  "Save page to file" / "Load page from file" keep the whole page; "Copy link" gives a link that opens with the same
+  party, rules and seed. "Reset everything" starts over; every reset or delete asks first ("Do not ask again" per
+  question, "Ask again" brings them back).
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
 

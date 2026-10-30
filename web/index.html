@@ -64,7 +64,11 @@
       <button id="add-player" class="quiet">Add player</button>
       <button id="reset" class="quiet" data-tip="Every player keeps their name and preferences; their rolls (locked
         hardcore ones too) and reroll counts are cleared">Clear all rolls</button>
+      <button id="reset-all" class="quiet danger" data-tip="Everything back to the start: one player, default
+        preferences, the rules from roller-config.js, no rolls (the world seed stays)">Reset everything</button>
     </div>
+    <p class="muted small" style="margin:8px 0 0">Resets and deletes ask first. <a href="#" id="ask-again"
+      data-tip="Bring back every question you ticked &quot;Do not ask again&quot; on">Ask again</a></p>
     <p id="world" class="muted" style="margin:12px 0 0"></p>
     <p id="msg" class="msg" style="margin:8px 0 0"></p>
   </section>
@@ -157,6 +161,14 @@
         <input type="text" id="party-code" readonly>
       </label>
       <button class="quiet" id="party-copy">Copy</button>
+      <button class="quiet" id="link-copy" data-tip="A link to this page that opens with this party, rules and
+        world seed (the page has to be at the same address for your friend, e.g. on a web server)">Copy link</button>
+    </div>
+    <div class="controls" style="margin-top:10px">
+      <button class="quiet" id="page-save" data-tip="Download the whole page (players, preferences, rules, rolls,
+        counts, shuffle decks, display, world seed and map settings) as roller-page.json">Save page to file</button>
+      <label class="quiet filebtn" data-tip="Load a page saved with Save page to file">Load page from file
+        <input type="file" id="page-load" accept=".json,application/json" hidden></label>
     </div>
     <p id="party-code-size" class="muted small" style="margin:4px 0 0"></p>
     <div class="controls" style="margin-top:10px">
@@ -205,6 +217,7 @@
 
 <div class="tooltip" id="tip"></div>
 <div class="wizard-back" id="wizard"></div>
+<div class="wizard-back" id="confirm"></div>
 
 <script src="roller-config.js"></script>
 <script src="zones.js"></script>
