@@ -1,6 +1,8 @@
 # mod-world-randomizer
 
-A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore":
+A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore", based on
+[UncleChimpus](https://www.youtube.com/@UncleChimpuss/playlists)'s **HC Randomized WoW** series (see
+[Credits](#credits)):
 
 - **Brackets**: you list the level brackets (`Randomizer.Brackets`, lowest first, following on from each other).
   Every outdoor zone gets a home bracket from its real level range, then the brackets are shuffled between zones.
@@ -125,6 +127,8 @@ as the `web/` submodule (getting it: [Website](#website)). Online at
   "Save page to file" / "Load page from file" keep the whole page; "Copy link" gives a link that opens with the same
   party, rules and seed. "Reset everything" starts over; every reset or delete asks first ("Do not ask again" per
   question, "Ask again" brings them back).
+- `achievements.html`: every achievement with its rewards, by category, for Vanilla, TBC or Wrath content, with a
+  search. `tools/generate_achievements.py` writes its data (`web/achievements.js`) along with the SQL.
 - `map.html`: the world map with your aowow zone outlines, coloured by bracket. Original / Shuffled view,
   seed, bracket list, scope, and the config lines to paste into the server.
 - `config.html`: drop the `.conf` your server uses for this module or mod-dynamic-scaling and get it back in the
@@ -343,3 +347,14 @@ back to their accounts.
 - Without mod-dynamic-scaling, dungeon levels are picked when creatures spawn, from the players inside at that
   moment; someone joining later doesn't move creatures that are already up. The collective rescales them.
 - A seed shows the same world on the map page only while `world_randomizer_zone` matches `web/zones.js`.
+
+## Credits
+
+- **[UncleChimpus](https://www.youtube.com/@UncleChimpuss/playlists)**, whose **HC Randomized WoW** series this module
+  is based on:
+  - [I Randomized All of WoW Classic. Then I Did Hardcore](https://youtu.be/JjyZIukvaHg): the randomized world and
+    the achievements.
+  - [The World is Being Corrupted](https://www.youtube.com/watch?v=StYmBXcMWY8&list=PLTBbvJMyl1ksWwy8Zfic6vQYi3V0OrjyE):
+    the achievement rewards.
+- Player base stats per era: AzerothCore (Wrath), cMaNGOS-TBC (TBC) and vMaNGOS (Vanilla) world databases.
+
