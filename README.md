@@ -244,7 +244,7 @@ Commands: `.rach` (your account's rewards), `.rach list [category]`, `.rach prof
 ### The addon
 
 `addon/RandomizerAchievements` is a WoW 3.3.5 addon: copy the folder into the client's `Interface\AddOns`, or
-download `RandomizerAchievements-v<version>.zip` from the repository's Releases (every addon version gets a release
+download `RandomizerAchievements.zip` from the repository's Releases (every addon version gets a release
 by itself when it reaches GitHub, `.github/workflows/addon-release.yml`) and unzip it there.
 `/randach` opens a window with the categories, each achievement's icon, rewards, description and progress bar, and
 buttons for each party / raid member to see their account's achievements and this run's stats. It talks to the
