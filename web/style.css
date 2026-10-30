@@ -347,6 +347,22 @@ code { background: #0b0a08; padding: 0 4px; border-radius: 3px; }
 .limits input { width: 54px; padding: 4px 6px; }
 .banrow { display: flex; gap: 12px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--line); }
 .banlabel { min-width: 90px; color: var(--muted); font-size: 12px; padding-top: 14px; }
+/* Bans: factions side by side with their races, specs 5 classes a row, professions gathering / crafting */
+.items.bansides, .items.bangroups { gap: 12px; flex-wrap: nowrap; }
+.banside { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; }
+.banside.alliance { background: linear-gradient(180deg, rgba(40, 70, 160, 0.28), transparent); }
+.banside.horde { background: linear-gradient(180deg, rgba(150, 30, 30, 0.28), transparent); }
+.banhead { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.banhead b { font-family: Georgia, serif; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); }
+.banraces { display: flex; gap: 6px; flex-wrap: wrap; }
+.items.bangrid { display: grid; grid-template-columns: repeat(5, max-content); column-gap: 8px; }
+.bangroup { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; }
+.bansub { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 4px; }
+@media (max-width: 900px) {
+  .items.bangrid { grid-template-columns: repeat(2, max-content); }
+  .items.bansides, .items.bangroups { flex-wrap: wrap; }
+}
 
 /* Character picker */
 .wizard-back {

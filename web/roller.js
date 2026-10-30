@@ -151,6 +151,9 @@
   KEYS['class'].forEach(function (c) { [0, 1, 2].forEach(function (i) { KEYS.spec.push(c + '-' + i); }); });
   // Ban lists: rules key, KEYS list
   var DRAFT_KEYS = { race: KEYS.race, cls: KEYS['class'], spec: KEYS.spec, prof: KEYS.prof1 };
+  // Races in the game's character creation order, per faction
+  var BANNER_RACES = { alliance: ['1', '3', '4', '7', '11'], horde: ['2', '5', '6', '8', '10'] };
+
   var BAN_CATS = [['faction', 'faction'], ['race', 'race'], ['cls', 'class'], ['spec', 'spec'], ['prof', 'prof1']];
 
   function since(cat, key) {
@@ -1716,24 +1719,35 @@
       '</div>';
   }
 
+  function banRow(label, items, extra) {
+    return '<div class="banrow"><span class="banlabel">' + label + '</span><div class="items' + (extra || '') + '">' +
+      items + '</div></div>';
+  }
+
+  // Factions side by side with their races below them; specs 5 classes a row; professions gathering / crafting
   function renderBans() {
-    var labels = { faction: 'Factions', race: 'Races', cls: 'Classes', spec: 'Specs', prof: 'Professions' };
-    $('bans').innerHTML = BAN_CATS.map(function (b) {
-      var items;
-      if (b[0] === 'spec') {
-        items = KEYS['class'].map(function (cls) {
-          return '<div class="specgroup">' + (showIcons() ? '<img class="classmark" src="' + itemIcon('class', cls) +
-            '" alt="" data-tip="' + esc(CLASSES[cls].name) + '">' : '<span class="classname">' +
-            esc(CLASSES[cls].name) + '</span>') + [0, 1, 2].map(function (i) {
-            return banItem('spec', 'spec', cls + '-' + i);
-          }).join('') + '</div>';
-        }).join('');
-      } else {
-        items = KEYS[b[1]].map(function (key) { return banItem(b[0], b[1], key); }).join('');
-      }
-      return '<div class="banrow"><span class="banlabel">' + labels[b[0]] + '</span><div class="items' +
-        (b[0] === 'spec' ? ' specs' : '') + '">' + items + '</div></div>';
+    var sides = ['alliance', 'horde'].map(function (f) {
+      return '<div class="banside ' + f + '"><div class="banhead">' + banItem('faction', 'faction', f) +
+        '<b>' + itemName('faction', f) + '</b></div><div class="banraces">' + BANNER_RACES[f].map(function (key) {
+        return banItem('race', 'race', key);
+      }).join('') + '</div></div>';
     }).join('');
+    var classes = KEYS['class'].map(function (key) { return banItem('cls', 'class', key); }).join('');
+    var specs = KEYS['class'].map(function (cls) {
+      return '<div class="specgroup">' + (showIcons() ? '<img class="classmark" src="' + itemIcon('class', cls) +
+        '" alt="" data-tip="' + esc(CLASSES[cls].name) + '">' : '<span class="classname">' +
+        esc(CLASSES[cls].name) + '</span>') + [0, 1, 2].map(function (i) {
+        return banItem('spec', 'spec', cls + '-' + i);
+      }).join('') + '</div>';
+    }).join('');
+    var profs = [['Gathering', true], ['Crafting', false]].map(function (g) {
+      return '<div class="bangroup"><span class="bansub">' + g[0] + '</span><div class="items">' +
+        KEYS.prof1.filter(function (key) { return !!PROFESSIONS[key].gather === g[1]; }).map(function (key) {
+          return banItem('prof', 'prof1', key);
+        }).join('') + '</div></div>';
+    }).join('');
+    $('bans').innerHTML = banRow('Factions &amp; races', sides, ' bansides') + banRow('Classes', classes) +
+      banRow('Specs', specs, ' specs bangrid') + banRow('Professions', profs, ' bangroups');
   }
 
   function renderSetup() {
@@ -1780,8 +1794,6 @@
   }
 
   // The character creation screen's order
-  var BANNER_RACES = { alliance: ['1', '3', '4', '7', '11'], horde: ['2', '5', '6', '8', '10'] };
-
   // A line about each race and class, and the racials the icons don't spell out
   var RACE_INFO = {
     1: { desc: 'Versatile and stubborn, humans rebuilt Stormwind and lead the Alliance.',
