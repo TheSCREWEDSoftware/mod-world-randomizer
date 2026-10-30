@@ -102,17 +102,17 @@
       <label class="check" style="align-self:center"><input type="checkbox" id="prof-slot"> A profession can't be in
         the same slot for two players <i class="info" data-tip="Two players can't share their Profession 1, nor their
           Profession 2, but one player's Profession 1 may be another's Profession 2.">i</i></label>
-      <label class="field"><span>Compatible professions <i class="info" data-tip="Off: the two professions are rolled
-          freely. | Each player's two go together: every player gets a pair that works on one character: a gathering
-          profession with the crafting one it supplies (Skinning + Leatherworking, Mining + Blacksmithing / Engineering
-          / Jewelcrafting, Herbalism + Alchemy / Inscription), or Tailoring + Enchanting. | The party covers itself:
-          every crafting profession in the party has its gathering profession somewhere in the party, and every
-          gathering profession supplies someone's crafting, so a player with Mining + Alchemy and one with Herbalism +
-          Jewelcrafting supply each other. | Solo, this means your own pair has to supply itself.">i</i></span>
+      <label class="field"><span>Compatible professions <i class="info" data-tip="Off: any two professions, for
+          everyone. | 1 player: both other options give you a pair that feeds itself: a gatherer with its crafting
+          (Mining + Blacksmithing, Herbalism + Alchemy, Skinning + Leatherworking) or Tailoring + Enchanting. | 2
+          players: &quot;Go together&quot; gives each of you such a pair. &quot;Party covers itself&quot; also lets
+          you feed each other (you Mining + Alchemy, them Herbalism + Jewelcrafting). | 3 or more players:
+          &quot;Party covers itself&quot; only needs every crafting profession's gatherer to be on someone in the
+          party.">i</i></span>
         <select id="compat">
           <option value="off">Off</option>
-          <option value="player">Each player's two go together (Skinning + Leatherworking)</option>
-          <option value="party">The party covers itself (Mining + Alchemy, Herbalism + Jewelcrafting)</option>
+          <option value="player">Go together: each player's own pair (Skinning + Leatherworking)</option>
+          <option value="party">Party covers itself: players feed each other</option>
         </select>
       </label>
     </div>
