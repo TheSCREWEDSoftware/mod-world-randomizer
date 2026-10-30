@@ -60,6 +60,29 @@ Every feature has its own switch; `Randomizer.Enable` is the master switch and `
 message. Nothing is written to `creature`: the swaps happen in memory at startup. `Randomizer.World.Enable = 0`
 and a restart bring the normal world back.
 
+## Website
+
+The character roller, the world map and the config update page:
+
+- **Online**: <https://thescrewedsoftware.github.io/mod-world-randomizer-website/>, nothing to install. Its code is
+  in [mod-world-randomizer-website](https://github.com/TheSCREWEDSoftware/mod-world-randomizer-website).
+- **Locally**: the website is this module's `web/` folder, a git submodule, so fetch it along with the module:
+
+  ```sh
+  # A new clone (in your AzerothCore modules folder):
+  git clone --recurse-submodules https://github.com/TheSCREWEDSoftware/mod-world-randomizer.git
+
+  # A clone you already have (empty web/ folder):
+  git submodule update --init --recursive
+
+  # Later, to get a newer website along with the module:
+  git pull --recurse-submodules
+  git submodule update --init --recursive
+  ```
+
+  Then open `web/index.html` in your browser. See [Web pages](#web-pages-web) for what each page does, and how to
+  use the world map with aowow's map pictures.
+
 ## How new characters start
 
 1. A character is created as usual, at its race's normal start.
@@ -76,8 +99,8 @@ across restarts until you reroll it.
 
 Plain HTML + JavaScript, no build step. They live in their own repository,
 [mod-world-randomizer-website](https://github.com/TheSCREWEDSoftware/mod-world-randomizer-website), included here
-as the `web/` submodule: clone with `git clone --recursive`, or run `git submodule update --init` in an existing
-clone. Online at <https://thescrewedsoftware.github.io/mod-world-randomizer-website/>.
+as the `web/` submodule (getting it: [Website](#website)). Online at
+<https://thescrewedsoftware.github.io/mod-world-randomizer-website/>.
 
 - `index.html`: character roller, for one player or a party (up to 40, two per row). Each player rolls a race
   (shown as its face and gender), class, spec and two professions, and can reroll everything or one of them, plus
