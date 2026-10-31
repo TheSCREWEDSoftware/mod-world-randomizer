@@ -375,4 +375,5 @@ back to their accounts.
   This module recreates the series' ideas for AzerothCore (WotLK 3.3.5a): the shuffled world, and the achievements
   with their rewards. It adds the TBC and Wrath versions, co-op starts, rolls and the website.
 - Player base stats per era: AzerothCore (Wrath), cMaNGOS-TBC (TBC) and vMaNGOS (Vanilla) world databases.
-
+- Made with the help of [Claude](https://claude.ai), Anthropic's AI assistant: written and reviewed together with it,
+  then tested and published by [Ryan Turner (TheSCREWEDSoftware)](https://github.com/TheSCREWEDSoftware).
