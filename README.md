@@ -385,3 +385,10 @@ back to their accounts.
 - Player base stats per era: AzerothCore (Wrath), cMaNGOS-TBC (TBC) and vMaNGOS (Vanilla) world databases.
 - Made with the help of [Claude](https://claude.ai), Anthropic's AI assistant: written and reviewed together with it,
   then tested and published by [Ryan Turner (TheSCREWEDSoftware)](https://github.com/TheSCREWEDSoftware).
+
+## Disclaimer
+
+World of Warcraft, Warcraft and Blizzard Entertainment are trademarks or registered trademarks of Blizzard
+Entertainment, Inc. The game's names, icons and images used by the addon and the website belong to Blizzard
+Entertainment, not to this project. This is a free, non-commercial fan project, not made, endorsed or supported by
+Blizzard Entertainment.
