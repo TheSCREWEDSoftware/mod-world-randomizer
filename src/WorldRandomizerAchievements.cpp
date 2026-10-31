@@ -877,9 +877,11 @@ public:
                 uint32(std::max(0, std::atoi(msg.c_str() + prefix.size() + 4))) : 1;
             if (version != RANDOMIZER_ADDON_VERSION)
                 ChatHandler(player->GetSession()).PSendSysMessage("|cffFF8000[World Randomizer]|r Your "
-                    "RandomizerAchievements addon is version {}, this server expects version {}: {} it from the "
-                    "module's addon folder.", version, RANDOMIZER_ADDON_VERSION,
-                    version < RANDOMIZER_ADDON_VERSION ? "update" : "use the matching version of");
+                    "RandomizerAchievements addon is version {}, this server expects version {}: {} it from "
+                    "https://github.com/TheSCREWEDSoftware/mod-world-randomizer/releases/tag/v{}", version,
+                    RANDOMIZER_ADDON_VERSION,
+                    version < RANDOMIZER_ADDON_VERSION ? "update" : "use the matching version of",
+                    RANDOMIZER_ADDON_VERSION);
         }
 
         if (!enable)

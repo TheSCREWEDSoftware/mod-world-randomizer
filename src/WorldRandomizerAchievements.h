@@ -74,7 +74,7 @@ enum RandomizerAchReward : uint8
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
 // Goes up whenever the addon and the module change together; the addon's ADDON_VERSION
 // (addon/RandomizerAchievements/RandomizerAchievements.lua) must match it
-constexpr uint32 RANDOMIZER_ADDON_VERSION = 4;
+constexpr uint32 RANDOMIZER_ADDON_VERSION = 5;
 
 class Player;
 // WorldRandomizerRoll.cpp: ROLL / ROLLPEEK / ROLLSET requests; true when it was one

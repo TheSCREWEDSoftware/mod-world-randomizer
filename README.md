@@ -284,7 +284,12 @@ download `RandomizerAchievements.zip` from the repository's Releases and unzip i
 Releasing a new addon version (maintainers): GitHub > Actions > **Addon release** > Run workflow, and type the
 version (a whole number, e.g. 5). The workflow writes it to the `.toc`, the addon's `ADDON_VERSION` and the module's
 `RANDOMIZER_ADDON_VERSION`, commits that to the branch, then makes the `v5` release with the zip
-(`.github/workflows/addon-release.yml`). Releases happen only this way, never by themselves.
+(`.github/workflows/addon-release.yml`). Releases happen only this way, never by themselves. Leave the version
+empty to release the current one; the form and the run's title show the current version (kept up to date when the
+repository has a `RELEASE_TOKEN` secret, see the comments at the top of the workflow).
+
+When the addon and the server's module expect different versions, the addon shows a popup at login with the link to
+the right release (`releases/tag/v<version>`) to copy, and the server says the same in chat.
 `/randach` opens a window with the categories, each achievement's icon, rewards, description and progress bar, and
 buttons for each party / raid member to see their account's achievements and this run's stats. It talks to the
 server with addon whispers to yourself (prefix `RANDACH`, protocol in `src/WorldRandomizerAchievements.h`), so
