@@ -143,7 +143,10 @@ as the `web/` submodule (getting it: [Website](#website)). Online at
   `web/conf-templates.js`; `python3 tools/make_conf_templates.py` rebuilds it after a `.conf.dist` changes.
 
 After changing the pages (or regenerating `web/zones.js` / `web/conf-templates.js`), commit inside `web/` and push
-the website repository, then commit the new `web` commit here. GitHub Pages serves the website repository as it is.
+the website repository. GitHub Pages serves the website repository as it is. The **Website update** workflow
+(`.github/workflows/website-update.yml`) then moves this module's `web` to the website's newest commit: every day at
+04:00 UTC when the website changed, after every Addon release run, or by hand (Actions > Website update > Run
+workflow). Each module commit pins the website commit it goes with, and addon releases name it in their notes.
 
 `web/randomizer.js` is the same shuffle as `WorldRandomizer.cpp` (same generator, same order), so a seed shows
 exactly the world the server will build. Tested for 72 seed / scope / balance / adjacency combinations against the

@@ -1,0 +1,53 @@
+# Brings the web/ submodule (mod-world-randomizer-website) up to its newest commit on main and commits that here.
+# Runs every day at 04:00 UTC (only commits when the website changed), by hand (Actions > Website update > Run
+# workflow), and after every Addon release run.
+name: Website update
+run-name: "Website update"
+
+on:
+  schedule:
+    - cron: "0 4 * * *"   # every day, 04:00 UTC
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: website-update-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}   # the branch's newest commit, after any version commit the release just pushed
+          submodules: true
+          fetch-depth: 0
+
+      - name: Update web/ to the website's newest commit
+        run: |
+          set -e
+          git pull --ff-only origin "${GITHUB_REF_NAME}"
+          old=$(git rev-parse HEAD:web)
+          git submodule update --init --remote web
+          new=$(git -C web rev-parse HEAD)
+          if [ "$old" = "$new" ]; then
+            echo "The website is already up to date (${old:0:7})."
+            echo "- Website already up to date: \`${old:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          log=$(git -C web log --format='- %s' "$old..$new" 2>/dev/null || echo "- (the old commit isn't in the website's history)")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898341+github-actions[bot]@users.noreply.github.com"
+          git add web
+          addon=$(sed -n 's/^## Version:[[:space:]]*//p' addon/RandomizerAchievements/RandomizerAchievements.toc | tr -d '\r')
+          git commit -m "Website: update to ${new:0:7}" -m "$log" \
+            -m "The module (addon version $addon) now expects mod-world-randomizer-website at $new."
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          {
+            echo "- Website updated: \`${old:0:7}\` to \`${new:0:7}\`"
+            echo "$log"
+          } >> "$GITHUB_STEP_SUMMARY"
