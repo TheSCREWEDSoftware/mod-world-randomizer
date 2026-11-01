@@ -446,6 +446,18 @@ Randomizer.Achievements.Announce = 1
 Randomizer.Achievements.GroupCredit = 1
 
 #
+#    Randomizer.Achievements.ChallengeOnly
+#        Description: Only characters doing the challenge make achievement progress: ones that chose how to start
+#                     (Start alone, or a co-op party: the addon's Group tab or .coop), tied a roll from the web
+#                     roller, or are on a hardcore run. Other characters on the account (older characters, GM
+#                     characters) neither finish achievements nor add to their counts; the rewards still apply to
+#                     every character of the account. With co-op, rolls and hardcore all off, every character counts.
+#        Default:     1 - enabled
+#                     0 - disabled (every character counts)
+
+Randomizer.Achievements.ChallengeOnly = 1
+
+#
 #    Randomizer.Achievements.BaseLevelCap
 #        Description: Level cap before the "+N Max Level Cap" rewards. 0 = no cap from this module (those rewards
 #                     then do nothing). The shipped achievements give up to +12 levels, so 68 reaches 80.

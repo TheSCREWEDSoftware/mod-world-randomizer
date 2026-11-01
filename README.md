@@ -240,6 +240,13 @@ character on the account. Each achievement can have an icon, a description and s
 `world_randomizer_achievement` and `world_randomizer_achievement_reward` (world DB), and
 `tools/generate_achievements.py` builds the shipped list (taken from the reference screenshots).
 
+Only characters doing the challenge make progress (`Randomizer.Achievements.ChallengeOnly`, on by default): ones that
+chose how to start (Start alone or a co-op party), tied a roll, or are on a hardcore run. Older characters and GM
+characters on the same account don't finish achievements or add to the counts; the rewards still apply to every
+character of the account. To start over, empty the `world_randomizer_ach_*` tables in the characters DB with the
+server stopped (`world_randomizer_ach_done` holds what's done, and every reward is worked out from it); rewards a
+character already got (spells, titles, start gold and items) stay on it.
+
 Reward types (`type` column; numbers in `src/WorldRandomizerAchievements.h`): XP %, level cap (+levels over
 `Randomizer.Achievements.BaseLevelCap`), talent points per level, flat talent points, start gold, start items,
 looted money %, health / mana regen %, skill rate (per skill or every profession), armor / weapon type usable by
