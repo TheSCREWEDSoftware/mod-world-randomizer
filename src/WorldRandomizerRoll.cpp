@@ -406,6 +406,7 @@ public:
             std::lock_guard lock(_lock);
             _rolls[player->GetGUID().GetCounter()] = p;
         }
+        WorldRandomizerAchievements::ChallengeStarted(player);
 
         // The rolled professions, learned right away, and the tools they need
         bool learn = sConfigMgr->GetOption<bool>("Randomizer.Roll.LearnProfessions", true);

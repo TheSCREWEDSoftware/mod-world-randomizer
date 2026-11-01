@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cctype>
 #include <map>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -189,6 +190,7 @@ public:
     uint32 manaRegenSpell = 150111;
     uint8 expansionSetting = 0;
     uint8 expansion = 3; // 1 Vanilla, 2 TBC, 3 Wrath
+    bool challengeOnly = true;
 
     void LoadConfig()
     {
@@ -202,6 +204,47 @@ public:
         manaRegenSpell = sConfigMgr->GetOption<uint32>("Randomizer.Achievements.ManaRegenSpell", 150111);
 
         expansionSetting = std::min<uint8>(3, sConfigMgr->GetOption<uint8>("Randomizer.Achievements.Expansion", 0));
+        challengeOnly = sConfigMgr->GetOption<bool>("Randomizer.Achievements.ChallengeOnly", true);
+        std::lock_guard lock(_challengeLock);
+        _challenge.clear();
+    }
+
+    // Only characters doing the challenge make progress (ChallengeOnly): ones that chose how to start (alone or in
+    // a co-op party), tied a roll, or are on a hardcore run. With none of those features on, no character could
+    // start, so then every character counts. Looked up once per character and kept; ChallengeStarted() turns it on.
+    bool InChallenge(Player* player)
+    {
+        if (!challengeOnly)
+            return true;
+
+        RandomizerConfig const& config = sWorldRandomizer->Config();
+        bool rollEnable = sConfigMgr->GetOption<bool>("Randomizer.Roll.Enable", true);
+        if (!config.coopEnable && !rollEnable && !config.hardcoreMode)
+            return true;
+
+        ObjectGuid::LowType guid = player->GetGUID().GetCounter();
+        {
+            std::lock_guard lock(_challengeLock);
+            auto itr = _challenge.find(guid);
+            if (itr != _challenge.end())
+                return itr->second;
+        }
+
+        bool yes = !!CharacterDatabase.Query(
+            "SELECT 1 FROM `world_randomizer_start_choice` WHERE `guid` = {0} UNION ALL "
+            "SELECT 1 FROM `world_randomizer_coop_member` WHERE `guid` = {0} UNION ALL "
+            "SELECT 1 FROM `world_randomizer_roll` WHERE `guid` = {0} UNION ALL "
+            "SELECT 1 FROM `world_randomizer_hardcore` WHERE `guid` = {0} LIMIT 1", guid);
+
+        std::lock_guard lock(_challengeLock);
+        _challenge[guid] = yes;
+        return yes;
+    }
+
+    void SetInChallenge(Player* player)
+    {
+        std::lock_guard lock(_challengeLock);
+        _challenge[player->GetGUID().GetCounter()] = true;
     }
 
     void Load()
@@ -373,10 +416,15 @@ public:
     void Forget(Player* player)
     {
         _runs.erase(player->GetGUID().GetCounter());
+        std::lock_guard lock(_challengeLock);
+        _challenge.erase(player->GetGUID().GetCounter());
     }
 
     void AddCounter(Player* player, std::string const& counter, uint32 amount = 1)
     {
+        if (!InChallenge(player))
+            return;
+
         RandomizerAccountState& state = Account(player);
         uint32& value = state.counters[counter];
         value += amount;
@@ -386,13 +434,16 @@ public:
 
     void SetRun(Player* player, char const* counter, uint32 value)
     {
+        if (!InChallenge(player))
+            return;
+
         CharacterDatabase.Execute("REPLACE INTO `world_randomizer_ach_run` (`guid`, `counter`, `value`) VALUES "
             "({}, '{}', {})", player->GetGUID().GetCounter(), counter, value);
     }
 
     bool AddZone(Player* player, uint32 zoneId)
     {
-        if (!_zoneList.count(zoneId))
+        if (!_zoneList.count(zoneId) || !InChallenge(player))
             return false;
 
         RandomizerAccountState& state = Account(player);
@@ -463,7 +514,7 @@ public:
     void Evaluate(Player* player, uint8 criteria, uint32 arg = 0, uint32 extra = 0)
     {
         // Not while the character loads (the core sets skills and spells then): login runs EvaluateAll instead
-        if (!enable || !player || !player->GetSession() || !player->IsInWorld())
+        if (!enable || !player || !player->GetSession() || !player->IsInWorld() || !InChallenge(player))
             return;
 
         auto itr = _byCriteria.find(criteria);
@@ -948,6 +999,8 @@ private:
     std::unordered_set<uint32> _zoneList;
     std::unordered_map<uint32, RandomizerAccountState> _accounts;
     std::unordered_map<ObjectGuid::LowType, RandomizerRunState> _runs;
+    std::unordered_map<ObjectGuid::LowType, bool> _challenge; // doing the challenge, per character (InChallenge)
+    std::mutex _challengeLock;
     std::map<std::pair<ObjectGuid::LowType, uint32>, uint16> _savedSkills;
     std::unordered_map<ObjectGuid, uint32> _multipliedLoot;
 };
@@ -966,6 +1019,16 @@ uint32 WorldRandomizerAchievements::GetStartMoney(uint32 accountId)
     if (!sRandomizerAch->enable)
         return 0;
     return sRandomizerAch->Account(accountId).perks.startGold * GOLD;
+}
+
+void WorldRandomizerAchievements::ChallengeStarted(Player* player)
+{
+    if (!player)
+        return;
+
+    sRandomizerAch->SetInChallenge(player);
+    if (sRandomizerAch->enable)
+        sRandomizerAch->EvaluateAll(player);
 }
 
 class AchievementWorldScript : public WorldScript
@@ -1091,7 +1154,7 @@ public:
 
     void OnPlayerCompleteQuest(Player* player, Quest const* /*quest*/) override
     {
-        if (!sRandomizerAch->enable)
+        if (!sRandomizerAch->enable || !sRandomizerAch->InChallenge(player))
             return;
 
         RandomizerRunState& run = sRandomizerAch->Run(player);
@@ -1101,7 +1164,7 @@ public:
 
     void OnPlayerMoneyChanged(Player* player, int32& amount) override
     {
-        if (!sRandomizerAch->enable || amount <= 0)
+        if (!sRandomizerAch->enable || amount <= 0 || !sRandomizerAch->InChallenge(player))
             return;
 
         RandomizerRunState& run = sRandomizerAch->Run(player);
@@ -1328,6 +1391,8 @@ private:
 
     void CreditKill(Player* player, Creature* killed)
     {
+        if (!sRandomizerAch->InChallenge(player))
+            return;
 
         CreatureTemplate const* cInfo = killed->GetCreatureTemplate();
         if (cInfo && (cInfo->rank == CREATURE_ELITE_RARE || cInfo->rank == CREATURE_ELITE_RAREELITE))

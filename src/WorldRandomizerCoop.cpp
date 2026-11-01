@@ -149,6 +149,7 @@ public:
         _alone.insert(guid);
         CharacterDatabase.Execute("REPLACE INTO `world_randomizer_start_choice` (`guid`, `chosen_at`) VALUES ({}, {})",
             guid, GameTime::GetGameTime().count());
+        WorldRandomizerAchievements::ChallengeStarted(player);
     }
 
     std::string const* CodeOf(ObjectGuid::LowType guid) const
@@ -260,6 +261,7 @@ private:
 
         CharacterDatabase.Execute("REPLACE INTO `world_randomizer_coop_member` (`guid`, `code`, `joined_at`) VALUES "
             "({}, '{}', {})", guid, code, GameTime::GetGameTime().count());
+        WorldRandomizerAchievements::ChallengeStarted(player);
 
         WorldLocation home(party.mapId, party.x, party.y, party.z, party.o);
         RandomizerSetHomebind(player, home, party.zoneId);

@@ -89,6 +89,9 @@ namespace WorldRandomizerAchievements
     // For the hardcore fresh-start check: what achievements give a new character of this account
     std::vector<std::pair<uint32, uint32>> GetStartItems(uint32 accountId);
     uint32 GetStartMoney(uint32 accountId);
+    // This character just started the challenge (chose to start alone or in a co-op party, tied a roll, or began a
+    // hardcore run): from now on it makes achievement progress
+    void ChallengeStarted(Player* player);
 }
 
 void AddWorldRandomizerAchievementScripts();

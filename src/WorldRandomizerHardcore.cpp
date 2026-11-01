@@ -392,6 +392,7 @@ public:
             "VALUES ({}, {}, '{}', {}, {}, {}, {}, 0, {}, {})",
             player->GetGUID().GetCounter(), entry.account, entry.name, entry.race, entry.cls, entry.gender, entry.level,
             GameTime::GetGameTime().count(), sWorldRandomizer->GetSeed());
+        WorldRandomizerAchievements::ChallengeStarted(player);
 
         ChatHandler(player->GetSession()).SendSysMessage("|cffFF2020[Hardcore]|r You have one life. If you die, this "
             "character is gone.");
