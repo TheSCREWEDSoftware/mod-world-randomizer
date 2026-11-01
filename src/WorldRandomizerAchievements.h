@@ -74,15 +74,19 @@ enum RandomizerAchReward : uint8
 constexpr char const* RANDOMIZER_ADDON_PREFIX = "RANDACH";
 // Goes up whenever the addon and the module change together; the addon's ADDON_VERSION
 // (addon/RandomizerAchievements/RandomizerAchievements.lua) must match it
-constexpr uint32 RANDOMIZER_ADDON_VERSION = 5;
+constexpr uint32 RANDOMIZER_ADDON_VERSION = 6;
 
 class Player;
 // WorldRandomizerRoll.cpp: ROLL / ROLLPEEK / ROLLSET requests; true when it was one
 bool HandleRollAddonMessage(Player* player, std::string const& body);
 // The roll this (online) character follows, as text; empty when none
 std::string RandomizerRollText(Player* player);
-// WorldRandomizerCoop.cpp: START / STARTSOLO / STARTCREATE / STARTJOIN / PARTY requests; true when it was one
+// WorldRandomizerCoop.cpp: START / STARTSOLO / STARTCREATE / STARTJOIN / PARTY / ZONES requests; true when it was one
 bool HandleCoopAddonMessage(Player* player, std::string const& body);
+// WorldRandomizerHardcore.cpp: 0 not hardcore, 1 hardcore and alive, 2 hardcore and dead
+uint8 RandomizerHardcoreState(Player const* player);
+// WorldRandomizerHardcore.cpp: the HARDCORE request (the addon's "Go hardcore"); true when it was one
+bool HandleHardcoreAddonMessage(Player* player, std::string const& body);
 
 namespace WorldRandomizerAchievements
 {
@@ -92,6 +96,8 @@ namespace WorldRandomizerAchievements
     // This character just started the challenge (chose to start alone or in a co-op party, tied a roll, or began a
     // hardcore run): from now on it makes achievement progress
     void ChallengeStarted(Player* player);
+    // Whether this character's play counts for the account's achievements (see Randomizer.Achievements.ChallengeOnly)
+    bool CountsForAchievements(Player* player);
 }
 
 void AddWorldRandomizerAchievementScripts();

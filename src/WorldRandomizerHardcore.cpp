@@ -38,6 +38,7 @@
 #include "StringConvert.h"
 #include "Timer.h"
 #include "World.h"
+#include "WorldPacket.h"
 #include "WorldSession.h"
 
 #include <algorithm>
@@ -980,6 +981,58 @@ public:
         return true;
     }
 };
+
+uint8 RandomizerHardcoreState(Player const* player)
+{
+    if (!player || !sWorldRandomizer->Config().hardcoreMode || !sHardcore->IsHardcore(player))
+        return 0;
+    return sHardcore->IsDead(player) ? 2 : 1;
+}
+
+// "HARDCORE": the addon's "Go hardcore" button, the same as .hardcore on confirm. Answers "X\t<why not>" when it
+// can't; the addon asks for the Group tab (START) again either way, which shows the new state.
+bool HandleHardcoreAddonMessage(Player* player, std::string const& body)
+{
+    if (body != "HARDCORE")
+        return false;
+
+    auto reply = [player](std::string text)
+    {
+        std::replace(text.begin(), text.end(), '\t', ' ');
+        text = std::string(RANDOMIZER_ADDON_PREFIX) + "\tX\t" + text;
+        if (text.size() > 254)
+            text.resize(254);
+        WorldPacket data;
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, LANG_ADDON, player, player, text);
+        player->SendDirectMessage(&data);
+    };
+
+    RandomizerConfig const& config = sWorldRandomizer->Config();
+    if (config.hardcoreMode != 1)
+    {
+        reply(config.hardcoreMode == 2 ? "Every new character is hardcore on this server." :
+            "Hardcore is off on this server.");
+        return true;
+    }
+    if (sHardcore->IsHardcore(player))
+    {
+        reply("You are already hardcore.");
+        return true;
+    }
+
+    std::vector<std::string> problems = sHardcore->CheckFreshStart(player);
+    if (!problems.empty())
+    {
+        std::string why;
+        for (std::string const& problem : problems)
+            why += (why.empty() ? "" : "; ") + problem;
+        reply("This character can't go hardcore: " + why + ".");
+        return true;
+    }
+
+    sHardcore->Register(player);
+    return true;
+}
 
 void AddWorldRandomizerHardcoreScripts()
 {

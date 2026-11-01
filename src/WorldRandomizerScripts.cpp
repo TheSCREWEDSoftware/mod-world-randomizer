@@ -86,6 +86,44 @@ public:
         talentPointsForLevel = uint32(std::max<int64>(0, points));
     }
 
+    // Each race's capital (the game_tele spots): map, x, y, z, orientation, zone
+    struct Capital { uint8 race; uint32 map; float x, y, z, o; uint32 zone; char const* name; };
+
+    static bool StartInCapital(Player* player)
+    {
+        static Capital const CAPITALS[] =
+        {
+            { RACE_HUMAN,         0, -8833.38f,   628.628f,   94.0066f, 1.06535f,  1519, "Stormwind" },
+            { RACE_ORC,           1,  1629.85f, -4373.64f,    31.5573f, 3.69762f,  1637, "Orgrimmar" },
+            { RACE_DWARF,         0, -4918.88f,  -940.406f,  501.564f,  5.42347f,  1537, "Ironforge" },
+            { RACE_NIGHTELF,      1,  9949.56f,  2284.21f,  1341.4f,    1.59587f,  1657, "Darnassus" },
+            { RACE_UNDEAD_PLAYER, 0,  1584.14f,   240.308f,  -52.1534f, 0.041793f, 1497, "Undercity" },
+            { RACE_TAUREN,        1, -1277.37f,   124.804f,  131.287f,  5.22274f,  1638, "Thunder Bluff" },
+            { RACE_GNOME,         0, -4918.88f,  -940.406f,  501.564f,  5.42347f,  1537, "Ironforge" },
+            { RACE_TROLL,         1,  1629.85f, -4373.64f,    31.5573f, 3.69762f,  1637, "Orgrimmar" },
+            { RACE_BLOODELF,    530,  9487.69f, -7279.2f,     14.2866f, 6.16478f,  3487, "Silvermoon City" },
+            { RACE_DRAENEI,     530, -3965.7f, -11653.6f,  -138.844f,  0.852154f, 3557, "The Exodar" },
+        };
+
+        for (Capital const& c : CAPITALS)
+        {
+            if (c.race != player->getRace())
+                continue;
+
+            WorldLocation home(c.map, c.x, c.y, c.z, c.o);
+            RandomizerSetHomebind(player, home, c.zone);
+            player->TeleportTo(c.map, c.x, c.y, c.z, c.o);
+            std::vector<Bracket> const& brackets = sWorldRandomizer->Config().brackets; // lowest first
+            Bracket first = brackets.empty() ? Bracket() : brackets.front();
+            ChatHandler(player->GetSession()).PSendSysMessage("|cffFF8000[World Randomizer]|r You start in {}, safe "
+                "among its guards, with your hearthstone there. Pick where your journey starts in the "
+                "RandomizerAchievements addon's Group tab (or .coop alone / .coop create), or travel to a level {}-{} "
+                "zone (the addon's World tab lists them).", c.name, first.levelMin, first.levelMax);
+            return true;
+        }
+        return false;
+    }
+
     void OnPlayerFirstLogin(Player* player) override
     {
         RandomizerConfig const& config = sWorldRandomizer->Config();
@@ -93,6 +131,11 @@ public:
             return;
 
         if (config.playerStartSkipDK && player->IsClass(CLASS_DEATH_KNIGHT))
+            return;
+
+        // Where = 2: the race's capital, safe among its guards (the race's own start may sit in a zone shuffled to
+        // high levels). The Group tab or .coop then takes the character to a bracket 1 zone.
+        if (config.playerStartWhere == 2 && StartInCapital(player))
             return;
 
         StartLocation location;

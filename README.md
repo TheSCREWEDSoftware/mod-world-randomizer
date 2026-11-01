@@ -29,8 +29,10 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore", based on
   between 31 and 40, bosses still above their trash. This works on its own; with
   [mod-dynamic-scaling](https://github.com/TheSCREWEDSoftware/mod-dynamic-scaling) installed and
   the collective on, that module does it instead and adds its Simple mode buff.
-- **New characters** start at a graveyard in a bracket 1 zone of their own faction (then contested zones), with
-  the hearthstone set there. Death Knights keep Ebon Hold.
+- **New characters** start in their race's capital city, safe among its guards, with the hearthstone there
+  (`Randomizer.PlayerStart.Where = 2`); then they pick their start (alone or a co-op party, and the zone) in the
+  addon's Group tab or with `.coop`. `Where = 1` puts them at a graveyard in a bracket 1 zone of their own faction
+  (then contested zones) instead. Death Knights keep Ebon Hold.
 - **Player stats era**: base stats per level from Wrath (AzerothCore), TBC (cMaNGOS-TBC) or Vanilla
   (vMaNGOS), with an XP rate per era (Wrath x0.5, TBC x0.75, Vanilla x1 by default).
 
@@ -56,7 +58,11 @@ A Wrath (3.3.5) take on "I randomized all of WoW, then did hardcore", based on
 
 - **Co-op**: `.coop create` gives a 6 letter code; up to `Randomizer.Coop.MaxSize` friends (5 by default) type
   `.coop join <code>` and start in the same place, in the leader's group. The addon's Group tab does the same with
-  buttons, and can also start a character alone for good (it can't make or join a party afterwards).
+  buttons, and can also start a character alone for good (it can't make or join a party afterwards). Its zone
+  menu shows each zone's levels after the shuffle (and before), and the tab says whether the character is
+  hardcore and whether it counts for the achievements, with a "Go hardcore" button when it still can.
+- **The World tab** of the addon (`/randach world`) lists every zone in the level bracket the shuffle gave it,
+  lowest first, with its levels from before and your own zone marked.
 
 - **Achievements**: 144 account-wide achievements (levels, zones, quests, gold, HP, deaths, rares, weapon skills,
   professions, specializations...) whose rewards count on every character of the account. See below.
@@ -91,10 +97,13 @@ The character roller, the world map and the config update page:
 
 ## How new characters start
 
-1. A character is created as usual, at its race's normal start.
-2. On its very first login the module picks a random graveyard in a bracket 1 zone: first zones of the
-   character's own faction, then contested zones (only graveyards that faction may use), teleports the character
-   there and sets the hearthstone there. Death Knights keep Ebon Hold.
+1. A character is created as usual, at its race's normal start (which may now be in a zone shuffled to high
+   levels).
+2. On its very first login the module moves it to its race's capital city (Stormwind, Orgrimmar, Ironforge,
+   Darnassus, Undercity, Thunder Bluff, Silvermoon City, The Exodar) and sets the hearthstone there. With
+   `Randomizer.PlayerStart.Where = 1` it picks a random graveyard in a bracket 1 zone instead: first zones of the
+   character's own faction, then contested zones (only graveyards that faction may use). Death Knights keep Ebon
+   Hold.
 3. `Randomizer.Brackets.FactionStarts` (on by default) makes sure each faction has one of its own zones in bracket 1,
    so players don't all land in contested zones (without it both factions get one in about 1 seed out of 8).
 4. Playing together: one player types `.coop create` right away (level 1) and shares the code; the others type

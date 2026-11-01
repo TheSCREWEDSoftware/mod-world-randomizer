@@ -758,12 +758,21 @@ public:
         RandomizerPerks const& perks = state.perks;
         ChatHandler handler(player->GetSession());
 
+        std::vector<std::string> given; // said in chat, so it's clear what the achievements gave (or didn't)
         if (perks.startGold)
+        {
             player->ModifyMoney(int32(perks.startGold * GOLD));
+            given.push_back(Acore::StringFormat("{} gold", perks.startGold));
+        }
 
         for (auto const& [item, count] : perks.startItems)
-            if (sObjectMgr->GetItemTemplate(item))
-                player->AddItem(item, count);
+            if (ItemTemplate const* proto = sObjectMgr->GetItemTemplate(item))
+            {
+                if (player->AddItem(item, count))
+                    given.push_back(count > 1 ? Acore::StringFormat("{} x{}", proto->Name1, count) : proto->Name1);
+                else
+                    given.push_back(proto->Name1 + " (no room in your bags)");
+            }
 
         std::vector<uint32> professions = perks.startProfessions;
         if (state.chosenProfession && std::find(perks.professionChoices.begin(), perks.professionChoices.end(),
@@ -777,6 +786,8 @@ public:
                 continue;
 
             player->learnSpell(profession->spell);
+            if (player->HasSkill(skill))
+                given.push_back(profession->name);
             if (skill == state.chosenProfession && perks.startSkillBonus && player->HasSkill(skill))
             {
                 uint16 max = player->GetMaxSkillValue(skill);
@@ -785,9 +796,18 @@ public:
             }
         }
 
-        if (!state.done.empty())
-            handler.PSendSysMessage("|cffFFD100[Achievements]|r Your account's achievements gave this character its "
-                "start rewards ({} achievements done).", DoneCount(state));
+        if (state.done.empty())
+            return;
+
+        std::string list;
+        for (std::string const& what : given)
+            list += (list.empty() ? "" : ", ") + what;
+        if (list.empty())
+            handler.PSendSysMessage("|cffFFD100[Achievements]|r {} achievements done on this account; none of them "
+                "gives a new character anything to start with (gold, items or a profession).", DoneCount(state));
+        else
+            handler.PSendSysMessage("|cffFFD100[Achievements]|r From your account's achievements, this character "
+                "starts with: {}.", list);
     }
 
     void SetChoice(Player* player, uint32 skill)
@@ -915,7 +935,8 @@ public:
         // Rolls from the web roller (WorldRandomizerRoll.cpp) and the Group tab (WorldRandomizerCoop.cpp) work whether
         // achievements are on or not
         if (HandleRollAddonMessage(player, msg.substr(prefix.size())) ||
-            HandleCoopAddonMessage(player, msg.substr(prefix.size())))
+            HandleCoopAddonMessage(player, msg.substr(prefix.size())) ||
+            HandleHardcoreAddonMessage(player, msg.substr(prefix.size())))
             return true;
 
         // The level of the first talent point, so the addon can open the talent frame before level 10, and the
@@ -1019,6 +1040,11 @@ uint32 WorldRandomizerAchievements::GetStartMoney(uint32 accountId)
     if (!sRandomizerAch->enable)
         return 0;
     return sRandomizerAch->Account(accountId).perks.startGold * GOLD;
+}
+
+bool WorldRandomizerAchievements::CountsForAchievements(Player* player)
+{
+    return player && sRandomizerAch->InChallenge(player);
 }
 
 void WorldRandomizerAchievements::ChallengeStarted(Player* player)

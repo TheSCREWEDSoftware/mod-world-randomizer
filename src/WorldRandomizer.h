@@ -128,6 +128,7 @@ struct RandomizerConfig
     bool collectiveWorld = false;
 
     bool playerStart = true;
+    uint8 playerStartWhere = 2;    // 1 a graveyard in a random bracket 1 zone, 2 the race's capital city
     bool playerStartSkipDK = true;
     bool playerStartFactionLock = true;
     bool playerStartPreferLow = true; // zones that were already low level (their home bracket is bracket 1) first

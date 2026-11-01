@@ -495,9 +495,25 @@ namespace
         return text;
     }
 
+    // "min-max" of the bracket a zone was shuffled into, and of its own levels before the shuffle
+    std::string BracketText(RandomizerZone const& zone)
+    {
+        std::vector<Bracket> const& brackets = sWorldRandomizer->Config().brackets;
+        if (zone.bracket >= brackets.size())
+            return "?";
+        return Acore::StringFormat("{}-{}", brackets[zone.bracket].levelMin, brackets[zone.bracket].levelMax);
+    }
+
+    std::string OriginalText(RandomizerZone const& zone)
+    {
+        return Acore::StringFormat("{}-{}", zone.levelMin, zone.levelMax);
+    }
+
     // "G\t<state>\t<code>\t<members>\t<max size>\t<max level>\t<can choose 0/1>\t<why not>",
     // state 0 co-op off, 1 not chosen yet, 2 started alone, 3 in a party;
-    // then "Z\t<zone id>\t<name>" per start zone the party could pick, and "E\tSTART"
+    // "H\t<hardcore 0 no / 1 alive / 2 dead>\t<counts for achievements 0/1>\t<hardcore mode>\t<can try 0/1>";
+    // then "Z\t<zone id>\t<name>\t<bracket min-max>\t<levels before the shuffle>" per start zone the party could
+    // pick, and "E\tSTART"
     void SendStart(Player* player)
     {
         RandomizerConfig const& config = sWorldRandomizer->Config();
@@ -510,10 +526,16 @@ namespace
         SendAddon(player, Acore::StringFormat("G\t{}\t{}\t{}\t{}\t{}\t{}\t{}", state, code ? *code : "", members,
             config.coopMaxSize, config.coopMaxLevel, state == 1 && whyNot.empty() ? 1 : 0, NoTabs(whyNot)));
 
+        uint8 hardcore = RandomizerHardcoreState(player);
+        SendAddon(player, Acore::StringFormat("H\t{}\t{}\t{}\t{}", hardcore,
+            WorldRandomizerAchievements::CountsForAchievements(player) ? 1 : 0, config.hardcoreMode,
+            config.hardcoreMode == 1 && !hardcore && player->GetLevel() == 1 ? 1 : 0));
+
         if (state == 1 && whyNot.empty() && config.enable)
             for (uint32 id : sWorldRandomizer->StartZones(player))
                 if (RandomizerZone const* zone = sWorldRandomizer->FindZone(id))
-                    SendAddon(player, Acore::StringFormat("Z\t{}\t{}", id, NoTabs(zone->name)));
+                    SendAddon(player, Acore::StringFormat("Z\t{}\t{}\t{}\t{}", id, NoTabs(zone->name),
+                        BracketText(*zone), OriginalText(*zone)));
 
         SendAddon(player, "E\tSTART");
     }
@@ -585,6 +607,7 @@ namespace
 //   "STARTCREATE\t<zone>"    make a co-op party (zone 0: a random one)  -> G..., or X\t<error>
 //   "STARTJOIN\t<code>"      join one                                   -> G..., or X\t<error>
 //   "PARTY"                  your co-op party and group                 -> M..., E PARTY
+//   "ZONES"                  every zone and its bracket (World tab)     -> W..., E ZONES
 bool HandleCoopAddonMessage(Player* player, std::string const& body)
 {
     if (body == "START")
@@ -596,6 +619,31 @@ bool HandleCoopAddonMessage(Player* player, std::string const& body)
     if (body == "PARTY")
     {
         SendParty(player);
+        return true;
+    }
+
+    // The World tab: every shuffled zone with its bracket, lowest first
+    //   "W\t<zone id>\t<name>\t<bracket min-max>\t<levels before>\t<territory: 0 A, 1 H, 2 contested>\t<bracket>"
+    //   then "E\tZONES\t<your zone id>\t<world shuffle on 0/1>"
+    if (body == "ZONES")
+    {
+        RandomizerConfig const& config = sWorldRandomizer->Config();
+        if (config.enable)
+        {
+            std::vector<RandomizerZone const*> zones;
+            for (RandomizerZone const& zone : sWorldRandomizer->GetZones())
+                zones.push_back(&zone);
+            std::sort(zones.begin(), zones.end(), [&config](RandomizerZone const* a, RandomizerZone const* b)
+            {
+                uint8 ma = a->bracket < config.brackets.size() ? config.brackets[a->bracket].levelMin : 255;
+                uint8 mb = b->bracket < config.brackets.size() ? config.brackets[b->bracket].levelMin : 255;
+                return ma != mb ? ma < mb : a->name < b->name;
+            });
+            for (RandomizerZone const* zone : zones)
+                SendAddon(player, Acore::StringFormat("W\t{}\t{}\t{}\t{}\t{}\t{}", zone->zoneId, NoTabs(zone->name),
+                    BracketText(*zone), OriginalText(*zone), zone->territory, zone->bracket));
+        }
+        SendAddon(player, Acore::StringFormat("E\tZONES\t{}\t{}", player->GetZoneId(), config.enable ? 1 : 0));
         return true;
     }
 

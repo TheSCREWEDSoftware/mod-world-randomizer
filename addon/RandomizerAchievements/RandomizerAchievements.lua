@@ -1,15 +1,16 @@
 -- Randomizer Achievements (WoW 3.3.5)
 -- Talks to mod-world-randomizer with addon whispers to yourself (prefix RANDACH):
 --   asks for the achievement list once, then for the progress of you or a party / raid member.
--- If the server doesn't answer within 10 seconds of logging in (no module, or achievements are off), the addon
--- turns itself off until the next login.
+-- If the server doesn't answer soon after logging in, the addon asks again a few times; after that it hides until
+-- an answer comes (or /randach asks once more). A server without the module just never answers.
 -- /randach            show or hide the window
 -- /randach <name>     show a group member's achievements
 -- /randach group      the Group tab: start alone or with a co-op party, and your party's info
 -- /randach roll       tie this character to its roll from the roller page
+-- /randach world      the World tab: every zone and the level bracket the shuffle gave it
 
 local PREFIX = "RANDACH"
-local ADDON_VERSION = 5   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
+local ADDON_VERSION = 6   -- must match RANDOMIZER_ADDON_VERSION in the module (src/WorldRandomizerAchievements.h)
 local serverVersion      -- what the module expects, from its "V" reply
 local ROW_HEIGHT = 50
 local ROWS = 8
@@ -25,19 +26,25 @@ local selectedCategory = 0
 local viewing = UnitName("player")
 local defsLoaded = false
 local expansion = 3      -- the server's content: 1 Vanilla, 2 TBC, 3 Wrath
-local available = nil    -- nil: waiting for the server, true: it answered, false: no module (off until next login)
+local available = nil    -- nil: waiting for the server, true: it answered, false: no answer yet (or module off)
 local replyTimeout
+local askTries = 0       -- how many times the server was asked without an answer
+local ASK_TRIES = 4      -- asks (10 seconds apart) before hiding
+local moduleOff = false  -- the server said the World Randomizer is off
 local minimapButton, optionsPanel
 local autoRefresh = 0    -- seconds until the open window asks the server again
 local achievementsOff = false -- the server said achievements are off ("My roll" still works)
 local EXPANSION_NAMES = { "Vanilla", "TBC", "Wrath" }
-local currentTab = 1     -- 1 achievements, 2 group
+local currentTab = 1     -- 1 achievements, 2 group, 3 world (zones and their brackets)
 local SelectTab, ShowPopupNow
 local function UI_DB_POPUP()
     RandomizerAchievementsDB = RandomizerAchievementsDB or {}
     return RandomizerAchievementsDB
 end
 local achWidgets = {}    -- what the achievements tab shows (hidden on the group tab)
+-- This character, from the server's "H": hardcore (0 no, 1 alive, 2 dead), whether its play counts for the
+-- achievements, the server's hardcore mode, and whether it may try "Go hardcore"
+local challenge = { hardcore = 0, counts = nil, mode = 0, canTry = false }
 
 -- Made for the server's current content?
 local function IsActive(def)
@@ -368,8 +375,13 @@ local function UpdateSummary()
     end
     local s = data.stats
     local cap = (s.cap and s.cap > 0) and ("   Level cap " .. s.cap) or ""
-    summary:SetText(string.format("%d / %d done   Deaths %d   Zones %d   This run: %d quests, %d rares, %dg%s",
-        s.done, s.total, s.deaths, s.zones, s.quests, s.rares, s.gold, cap))
+    local counts = ""
+    if viewing == UnitName("player") and challenge.counts ~= nil then
+        counts = challenge.counts and "   |cff4CFF00This character counts|r" or
+            "   |cffFF6060This character doesn't count yet|r"
+    end
+    summary:SetText(string.format("%d / %d done   Deaths %d   Zones %d   This run: %d quests, %d rares, %dg%s%s",
+        s.done, s.total, s.deaths, s.zones, s.quests, s.rares, s.gold, cap, counts))
 end
 
 local function Redraw()
@@ -389,10 +401,10 @@ end
 
 local RequestGroup
 refresh:SetScript("OnClick", function()
-    if currentTab == 2 then RequestGroup() else Request(viewing) end
+    if currentTab == 2 then RequestGroup() elseif currentTab == 3 then Send("ZONES") else Request(viewing) end
 end)
 
-local Disable
+local Disable, Revive
 
 local function Print(text)
     DEFAULT_CHAT_FRAME:AddMessage("|cffFFD100[Randomizer Achievements]|r " .. text)
@@ -648,6 +660,18 @@ groupErrorText:SetPoint("TOPLEFT", groupStatus, "BOTTOMLEFT", 0, -4)
 groupErrorText:SetWidth(670)
 groupErrorText:SetJustifyH("LEFT")
 
+-- This character: hardcore or not, and whether it counts for the achievements
+local statusLine = groupPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+statusLine:SetPoint("BOTTOMLEFT", 0, 4)
+statusLine:SetWidth(520)
+statusLine:SetJustifyH("LEFT")
+
+local hardcoreButton = CreateFrame("Button", nil, groupPanel, "UIPanelButtonTemplate")
+hardcoreButton:SetWidth(140); hardcoreButton:SetHeight(22)
+hardcoreButton:SetPoint("BOTTOMRIGHT", 0, 0)
+hardcoreButton:SetText("Go hardcore")
+hardcoreButton:Hide()
+
 -- The chooser: alone, or a party (make one, or join one with a code)
 local chooser = CreateFrame("Frame", nil, groupPanel)
 chooser:SetPoint("TOPLEFT", 0, -46)
@@ -666,11 +690,11 @@ zoneLabel:SetText("Start zone:")
 
 local zoneMenu = CreateFrame("Frame", "RandomizerStartZoneMenu", chooser, "UIDropDownMenuTemplate")
 zoneMenu:SetPoint("LEFT", zoneLabel, "RIGHT", -8, -2)
-UIDropDownMenu_SetWidth(zoneMenu, 200)
+UIDropDownMenu_SetWidth(zoneMenu, 260)
 
 local zoneHint = chooser:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 zoneHint:SetPoint("LEFT", zoneMenu, "RIGHT", -6, 2)
-zoneHint:SetText("for starting alone or making a party (joining goes where the party starts)")
+zoneHint:SetText("levels after the shuffle (and before); joining goes where the party starts")
 
 local aloneButton = BigButton(chooser, "Start alone")
 aloneButton:SetPoint("TOPLEFT", 0, -34)
@@ -694,10 +718,13 @@ local makeLabel = partyBox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 makeLabel:SetPoint("TOPLEFT", 0, 0)
 makeLabel:SetText("Make a party (in the start zone above)")
 
-local function ZoneName(id)
+local function ZoneName(id, plain)
     if id == 0 then return "Don't pick one" end
     for _, zone in ipairs(startZones) do
-        if zone.id == id then return zone.name end
+        if zone.id == id then
+            if plain or not zone.bracket then return zone.name end
+            return zone.name .. " (" .. zone.bracket .. (zone.was ~= "" and (", was " .. zone.was) or "") .. ")"
+        end
     end
     return "Zone " .. id
 end
@@ -734,7 +761,7 @@ local joinButton = BigButton(partyBox, "Join", 100)
 joinButton:SetPoint("LEFT", joinBox, "RIGHT", 8, 0)
 
 -- Every choice is for good, so each one asks first
-local function Confirm(what, request)
+local function Confirm(what, request, after)
     StaticPopupDialogs["RANDOMIZER_START_CONFIRM"] = {
         text = what .. "\n\nAre you sure you want to pick this option? You cannot redo this option.",
         button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
@@ -742,13 +769,14 @@ local function Confirm(what, request)
             groupError = nil
             waitingChoice = true
             Send(request)
+            if after then Send(after) end
         end,
     }
     StaticPopup_Show("RANDOMIZER_START_CONFIRM")
 end
 
 aloneButton:SetScript("OnClick", function()
-    local where = chosenZone == 0 and "where you are now" or ("in " .. ZoneName(chosenZone))
+    local where = chosenZone == 0 and "where you are now" or ("in " .. ZoneName(chosenZone, true))
     Confirm("Start alone " .. where .. ": this character will never make or join a co-op party.",
         "STARTSOLO\t" .. chosenZone)
 end)
@@ -758,7 +786,7 @@ partyButton:SetScript("OnClick", function()
     UpdateGroup()
 end)
 createButton:SetScript("OnClick", function()
-    local where = chosenZone == 0 and "a random start zone" or ZoneName(chosenZone)
+    local where = chosenZone == 0 and "a random start zone" or ZoneName(chosenZone, true)
     Confirm("Make a co-op party starting in " .. where .. ". You get a code to give your friends.",
         "STARTCREATE\t" .. chosenZone)
 end)
@@ -767,6 +795,10 @@ joinButton:SetScript("OnClick", function()
     if code == "" then return end
     joinBox:ClearFocus()
     Confirm("Join co-op party " .. code .. ": you start where that party starts.", "STARTJOIN\t" .. code)
+end)
+hardcoreButton:SetScript("OnClick", function()
+    Confirm("Go hardcore: one life. If this character dies, it can't be played again (a GM can bring it back).",
+        "HARDCORE", "START")
 end)
 joinBox:SetScript("OnEnterPressed", function() joinButton:Click() end)
 joinBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -807,6 +839,19 @@ end
 
 local partyMore = groupPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 
+local function StatusText()
+    local c = challenge
+    local hc
+    if c.mode == 0 then hc = "Hardcore: |cff999999off on this server|r"
+    elseif c.hardcore == 1 then hc = "|cffFF2020Hardcore: one life|r (alive)"
+    elseif c.hardcore == 2 then hc = "|cffFF2020Hardcore: died|r"
+    elseif c.mode == 2 then hc = "Hardcore: |cff999999not this character (made before it was on)|r"
+    else hc = "Hardcore: |cff999999no|r" .. (c.canTry and " (you can still choose it)" or "") end
+    local counts = c.counts == nil and "" or (c.counts and "   Achievements: |cff4CFF00this character counts|r" or
+        "   Achievements: |cffFF6060this character doesn't count|r (choose how it starts, tie a roll or go hardcore)")
+    return hc .. counts
+end
+
 local function StartText()
     local s = start
     if s.state == nil then return "Asking the server..." end
@@ -825,6 +870,8 @@ end
 UpdateGroup = function()
     if not frame:IsShown() or currentTab ~= 2 then return end
     groupStatus:SetText(StartText())
+    statusLine:SetText(StatusText())
+    Shown(hardcoreButton, challenge.canTry and challenge.hardcore == 0)
     groupErrorText:SetText(groupError or "")
 
     local choosing = start.canChoose and true or false
@@ -897,26 +944,98 @@ RequestGroup = function()
     UpdateGroup()
 end
 
+-- ---------------------------------------------------------------- world tab (every zone and its bracket)
+
+local worldPanel = CreateFrame("Frame", nil, frame)
+worldPanel:SetPoint("TOPLEFT", 22, -46)
+worldPanel:SetPoint("BOTTOMRIGHT", -22, 46)
+worldPanel:Hide()
+
+local worldHelp = worldPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+worldHelp:SetPoint("TOPLEFT", 0, -4)
+worldHelp:SetWidth(670)
+worldHelp:SetJustifyH("LEFT")
+worldHelp:SetText("Every zone in the level bracket the shuffle gave it, lowest first. The levels in grey are the " ..
+    "zone's own from before the shuffle. Yours is marked.")
+
+local worldScroll = CreateFrame("ScrollFrame", "RandomizerWorldScroll", worldPanel, "UIPanelScrollFrameTemplate")
+worldScroll:SetPoint("TOPLEFT", 0, -24)
+worldScroll:SetPoint("BOTTOMRIGHT", -26, 0)
+local worldChild = CreateFrame("Frame", nil, worldScroll)
+worldChild:SetWidth(640); worldChild:SetHeight(10)
+worldScroll:SetScrollChild(worldChild)
+local worldText = worldChild:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+worldText:SetPoint("TOPLEFT", 4, 0)
+worldText:SetWidth(630)
+worldText:SetJustifyH("LEFT")
+worldText:SetSpacing(2)
+
+local worldZones, worldIncoming = {}, {}
+local worldHere, worldOn = 0, nil
+local TERRITORY = { [0] = "|cff4A9EFFAlliance|r", [1] = "|cffFF4A4AHorde|r", [2] = "|cffAAAAAAContested|r" }
+
+local function UpdateWorld()
+    if not frame:IsShown() or currentTab ~= 3 then return end
+    if worldOn == nil then worldText:SetText("Asking the server...")
+    elseif not worldOn then worldText:SetText("The world shuffle is off on this server: every zone keeps its levels.")
+    else
+        local lines, last = {}, nil
+        for _, z in ipairs(worldZones) do
+            if z.bracket ~= last then
+                if last then table.insert(lines, " ") end
+                table.insert(lines, "|cffFFD100Levels " .. z.bracket .. "|r")
+                last = z.bracket
+            end
+            local here = z.id == worldHere and "  |cff4CFF00<< you are here|r" or ""
+            table.insert(lines, string.format("    %s  |cff999999(was %s)|r  %s%s", z.name, z.was,
+                TERRITORY[z.territory] or "", here))
+        end
+        worldText:SetText(table.concat(lines, "\n"))
+    end
+    worldChild:SetHeight(math.max(10, worldText:GetHeight() + 8))
+end
+
+local function OnWorldMessage(parts)
+    if parts[1] == "W" then
+        table.insert(worldIncoming, { id = tonumber(parts[2]) or 0, name = parts[3] or "?", bracket = parts[4] or "?",
+            was = parts[5] or "?", territory = tonumber(parts[6]) or 2 })
+        return true
+    elseif parts[1] == "E" and parts[2] == "ZONES" then
+        worldZones, worldIncoming = worldIncoming, {}
+        worldHere = tonumber(parts[3]) or 0
+        worldOn = parts[4] == "1"
+        UpdateWorld()
+        return true
+    end
+    return false
+end
+
 -- Tabs under the window
 local tabs = {}
 SelectTab = function(index)
     currentTab = index
     PanelTemplates_SetTab(frame, index)
     for _, widget in ipairs(achWidgets) do widget:Hide() end
+    groupPanel:Hide()
+    worldPanel:Hide()
     if index == 1 then
-        groupPanel:Hide()
         scroll:Show(); whoLabel:Show(); summary:Show()
         title:SetText("Randomizer Achievements")
         if defsLoaded then Request(viewing) end
         Redraw()
-    else
+    elseif index == 2 then
         groupPanel:Show()
         title:SetText("Randomizer - Group")
         RequestGroup()
+    else
+        worldPanel:Show()
+        title:SetText("Randomizer - World")
+        Send("ZONES")
+        UpdateWorld()
     end
 end
 
-for index, text in ipairs({ "Achievements", "Group" }) do
+for index, text in ipairs({ "Achievements", "Group", "World" }) do
     local tab = CreateFrame("Button", "RandomizerAchievementsFrameTab" .. index, frame,
         "CharacterFrameTabButtonTemplate")
     tab:SetID(index)
@@ -946,7 +1065,14 @@ local function OnGroupMessage(parts)
         startZonesIncoming = {}
         return true
     elseif kind == "Z" then
-        table.insert(startZonesIncoming, { id = tonumber(parts[2]) or 0, name = parts[3] or "?" })
+        table.insert(startZonesIncoming, { id = tonumber(parts[2]) or 0, name = parts[3] or "?", bracket = parts[4],
+            was = parts[5] or "" })
+        return true
+    elseif kind == "H" then
+        challenge.hardcore = tonumber(parts[2]) or 0
+        challenge.counts = parts[3] == "1"
+        challenge.mode = tonumber(parts[4]) or 0
+        challenge.canTry = parts[5] == "1"
         return true
     elseif kind == "M" then
         table.insert(partyIncoming, { name = parts[2] or "?", online = parts[3] == "1",
@@ -1154,8 +1280,13 @@ end
 local function OnMessage(message)
     local parts = Split(message, "\t")
     local kind = parts[1]
-    available = true
-    if OnRollMessage(parts) or OnGroupMessage(parts) then return end
+    if available ~= true then
+        local wasHidden = available == false
+        available = true
+        replyTimeout = nil
+        if wasHidden and Revive then Revive() end
+    end
+    if OnRollMessage(parts) or OnGroupMessage(parts) or OnWorldMessage(parts) then return end
 
     if kind == "A" then
         OnEarned(parts)
@@ -1224,19 +1355,41 @@ end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
+events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("CHAT_MSG_ADDON")
 events:RegisterEvent("PARTY_MEMBERS_CHANGED")
 events:RegisterEvent("RAID_ROSTER_UPDATE")
 
--- No module on this server (or achievements are off): stay quiet until the next login
+-- The server said the World Randomizer is off: stay quiet until the next login
 Disable = function()
     available = false
+    moduleOff = true
     replyTimeout = nil
     frame:Hide()
     if minimapButton then minimapButton:Hide() end
     events:UnregisterEvent("CHAT_MSG_ADDON")
     events:UnregisterEvent("PARTY_MEMBERS_CHANGED")
     events:UnregisterEvent("RAID_ROSTER_UPDATE")
+end
+
+-- Ask the server (again): the first answer turns everything on. Right after a login or a server restart the
+-- answer can take a while, so it asks a few times before hiding, and keeps listening after that.
+local function Ask()
+    if moduleOff then return end
+    askTries = askTries + 1
+    replyTimeout = 10
+    Send("DEF\t" .. ADDON_VERSION)
+    Send("START") -- not chosen yet: the Group tab opens with the chooser
+end
+
+-- No answer after every try: hide the window and the minimap button, but an answer later still brings them back
+local function SoftHide()
+    available = false
+    replyTimeout = nil
+    frame:Hide()
+    if minimapButton then minimapButton:Hide() end
+    Print("No answer from the server yet (it may not run the World Randomizer, or it is still starting). " ..
+        "Type /randach to ask again.")
 end
 
 local loginDelay
@@ -1248,6 +1401,12 @@ events:SetScript("OnEvent", function(self, event, prefix, message, channel, send
     elseif event == "PLAYER_LOGIN" then
         viewing = UnitName("player")
         loginDelay = 3 -- seconds, so the server has finished logging us in
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- After a loading screen: if the server never answered, ask again
+        if available ~= true and not loginDelay and not replyTimeout and not moduleOff then
+            askTries = 0
+            Ask()
+        end
     elseif frame:IsShown() then
         if currentTab == 2 then Send("PARTY") else UpdateMembers() end
     end
@@ -1255,7 +1414,7 @@ end)
 
 events:SetScript("OnUpdate", function(self, elapsed)
     -- Progress changes while you play: the open window asks again every few seconds
-    if frame:IsShown() and available and (currentTab == 2 or not achievementsOff) then
+    if frame:IsShown() and available and currentTab ~= 3 and (currentTab == 2 or not achievementsOff) then
         autoRefresh = autoRefresh - elapsed
         if autoRefresh <= 0 then
             autoRefresh = 5
@@ -1267,9 +1426,8 @@ events:SetScript("OnUpdate", function(self, elapsed)
         loginDelay = loginDelay - elapsed
         if loginDelay <= 0 then
             loginDelay = nil
-            replyTimeout = 10
-            Send("DEF\t" .. ADDON_VERSION)
-            Send("START") -- not chosen yet: the Group tab opens with the chooser
+            askTries = 0
+            Ask()
         end
     elseif replyTimeout then
         if available then
@@ -1278,9 +1436,7 @@ events:SetScript("OnUpdate", function(self, elapsed)
         end
         replyTimeout = replyTimeout - elapsed
         if replyTimeout <= 0 then
-            Disable()
-            Print("This server doesn't run the World Randomizer achievements, so the addon is off until your next "
-                .. "login.")
+            if askTries < ASK_TRIES then Ask() else SoftHide() end
         end
     end
 end)
@@ -1295,8 +1451,14 @@ end)
 SLASH_RANDACH1 = "/randach"
 SlashCmdList["RANDACH"] = function(arg)
     arg = arg and arg:gsub("^%s+", ""):gsub("%s+$", "") or ""
-    if available == false then
-        Print("Not available: this server doesn't run the World Randomizer achievements.")
+    if moduleOff then
+        Print("Not available: the World Randomizer is off on this server.")
+        return
+    elseif available == false then
+        Print("Asking the server again...")
+        available = nil
+        askTries = ASK_TRIES - 1 -- one more try
+        Ask()
         return
     elseif available == nil then
         Print("Still waiting for the server to answer, try again in a few seconds.")
@@ -1307,6 +1469,9 @@ SlashCmdList["RANDACH"] = function(arg)
     elseif arg:lower() == "group" then
         frame:Show()
         SelectTab(2)
+    elseif arg:lower() == "world" or arg:lower() == "zones" then
+        frame:Show()
+        SelectTab(3)
     elseif arg ~= "" then
         viewing = arg:sub(1, 1):upper() .. arg:sub(2):lower()
         frame:Show()
@@ -1327,7 +1492,8 @@ local UI_CLICK_TEXT = "open the achievements"
 local UI_HELP = "Account-wide achievements of mod-world-randomizer, with their rewards, for you and your group.\n\n" ..
     "A popup shows each achievement you earn, like the game's own (Interface > AddOns turns it off).\n\n" ..
     "/randach - show or hide the window\n/randach <name> - a group member's achievements\n/randach group - " ..
-    "start alone or with a co-op party, and your party's info\n/randach roll - tie this character to its roll " ..
+    "start alone or with a co-op party, and your party's info\n/randach world - every zone and its levels\n" ..
+    "/randach roll - tie this character to its roll " ..
     "from the roller page\n.rach - your rewards in chat\n\nThe window updates by " ..
     "itself every few seconds while it is open."
 local function UI_DB()
@@ -1343,9 +1509,9 @@ local function UI_STATUS()
         end
         return "|cff4CFF00Connected:|r the server runs the World Randomizer." .. versionText
     end
+    if moduleOff then return "|cffFF6060Not available:|r the World Randomizer is off on this server." end
     if available == false then
-        return "|cffFF6060Not available:|r this server doesn't run the World Randomizer achievements (off until " ..
-            "your next login)."
+        return "|cffFF6060No answer from the server|r (it may not run the World Randomizer). /randach asks again."
     end
     return "Waiting for the server to answer..."
 end
@@ -1362,6 +1528,12 @@ end
 local function UpdateMinimapButton()
     if not minimapButton then return end
     if available == false or UI_DB().hideMinimap then minimapButton:Hide() else minimapButton:Show() end
+end
+
+-- The server answered after the addon had hidden: show everything again
+Revive = function()
+    UpdateMinimapButton()
+    Print("The server answered: the addon is on.")
 end
 
 local function CreateMinimapButton()
