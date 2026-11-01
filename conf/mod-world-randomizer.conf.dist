@@ -253,11 +253,24 @@ Randomizer.Collective.DynamicScaling = 1
 
 #
 #    Randomizer.PlayerStart.Enable
-#        Description: New characters start at a graveyard in a random bracket 1 zone, with the hearthstone
-#                     set there.
+#        Description: New characters are moved away from their race's own start area on their first login (see
+#                     Randomizer.PlayerStart.Where for where), with the hearthstone set there.
 #        Default:     1
 
 Randomizer.PlayerStart.Enable = 1
+
+#
+#    Randomizer.PlayerStart.Where
+#        Description: Where new characters appear on their first login (with Randomizer.PlayerStart.Enable = 1).
+#                     2 = their race's capital city (Stormwind, Orgrimmar, Ironforge, Darnassus, Undercity,
+#                         Thunder Bluff, Silvermoon City, The Exodar), safe among its guards, with the hearthstone
+#                         there. They then pick their start (alone or a co-op party, and the zone) in the addon's
+#                         Group tab or with .coop, or walk to a bracket 1 zone. The race's own start area can be in a
+#                         zone shuffled to high levels, which is why this is the default.
+#                     1 = a graveyard in a random bracket 1 zone (FactionLock and PreferLowZones below apply).
+#        Default:     2
+
+Randomizer.PlayerStart.Where = 2
 
 #
 #    Randomizer.PlayerStart.FactionLock

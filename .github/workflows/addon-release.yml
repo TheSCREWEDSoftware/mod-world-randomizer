@@ -18,13 +18,13 @@
 name: Addon release
 # The run's title. The fallback number is the current version: the workflow keeps it (and the "current" in the
 # version box below) up to date when it has a RELEASE_TOKEN secret, see the end of this file's comments.
-run-name: "Addon Release Version: ${{ inputs.version || '5' }}"
+run-name: "Addon Release Version: ${{ inputs.version || '6' }}"
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version (current: 5). Leave empty to release v5, or type a higher whole number to change to it first"
+        description: "Version (current: 6). Leave empty to release v6, or type a higher whole number to change to it first"
         required: false
         default: ""
         type: string

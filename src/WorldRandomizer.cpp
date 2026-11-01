@@ -241,6 +241,8 @@ void WorldRandomizerMgr::LoadConfig()
     c.lootSwapMargin = sConfigMgr->GetOption<uint32>("Randomizer.Loot.SwapMargin", 3);
 
     c.playerStart = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.Enable", true);
+    c.playerStartWhere = uint8(std::clamp<uint32>(sConfigMgr->GetOption<uint32>("Randomizer.PlayerStart.Where", 2),
+        1, 2));
     c.playerStartSkipDK = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.SkipDeathKnights", true);
     c.playerStartFactionLock = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.FactionLock", true);
     c.playerStartPreferLow = sConfigMgr->GetOption<bool>("Randomizer.PlayerStart.PreferLowZones", true);
